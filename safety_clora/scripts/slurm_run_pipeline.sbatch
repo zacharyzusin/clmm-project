@@ -25,7 +25,7 @@ mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
 
 # --- Activate env (installed in persistent scratch) ---
 source "/insomnia001/shared/apps/anaconda/2023.09/etc/profile.d/conda.sh"
-conda activate "/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/conda-envs/safety_clora_pip"
+conda activate "/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/conda-envs/safety_clora_cuda_pip"
 
 export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
 

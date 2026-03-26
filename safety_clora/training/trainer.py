@@ -7,7 +7,7 @@ from typing import Any, Dict, Optional, Sequence
 import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
-from transformers import AutoModelForCausalLM, AutoTokenizer, default_data_collator
+from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import LoraConfig, get_peft_model, PeftModel
 
 from safety_clora.data.data_utils import load_gsm8k, load_safety_alignment_data, load_sst2
@@ -65,6 +65,26 @@ def _make_lm_dataset(tokenizer, ds, max_seq_len: int):
         return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
     return ds.map(_tok, remove_columns=ds.column_names)
+
+
+def _make_collate_fn(tokenizer):
+    """
+    Pads variable-length `input_ids`/`attention_mask` and pads `labels` with -100.
+    """
+
+    def _collate(features):
+        labels = [f.pop("labels") for f in features]
+        batch = tokenizer.pad(features, padding=True, return_tensors="pt")
+        max_len = batch["input_ids"].size(1)
+        padded_labels = []
+        for lab in labels:
+            if len(lab) < max_len:
+                lab = lab + ([-100] * (max_len - len(lab)))
+            padded_labels.append(lab[:max_len])
+        batch["labels"] = torch.tensor(padded_labels, dtype=torch.long)
+        return batch
+
+    return _collate
 
 
 def _apply_peft_lora(model, rank: int, alpha: int):
@@ -185,7 +205,7 @@ class Trainer:
             raise ValueError("mode must be one of: lora, clora_random, clora_safety")
 
         tokenized = _make_lm_dataset(tokenizer, train_dataset, max_seq_len=max_seq_len)
-        dl = DataLoader(tokenized, batch_size=batch_size, shuffle=True, collate_fn=default_data_collator)
+        dl = DataLoader(tokenized, batch_size=batch_size, shuffle=True, collate_fn=_make_collate_fn(tokenizer))
 
         opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=lr)
 
