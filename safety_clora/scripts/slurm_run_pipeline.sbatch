@@ -9,9 +9,9 @@
 
 set -euo pipefail
 
-# This script lives at: safety_clora/scripts/slurm_run_pipeline.sbatch
-# We want the repo root (so `python -m safety_clora...` works).
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+# This script lives at: clmm-project/safety_clora/scripts/slurm_run_pipeline.sbatch
+# Repo root is two levels up from this script's directory.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 cd "$REPO_ROOT"
 
 export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
