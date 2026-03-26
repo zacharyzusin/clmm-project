@@ -100,22 +100,25 @@ def _maybe_download_advbench_csv(dest_path: Path) -> None:
 
 def load_safety_alignment_data(n_samples: int = 500, split: str = "30k_train") -> Dataset:
     """
-    Small safety SFT dataset using BeaverTails safe examples.
-    Uses (prompt -> response) pairs if available; otherwise builds a generic refusal.
+    Small safety SFT dataset for refusal-style alignment.
+
+    For the intermediate report, we build refusal training pairs from *harmful prompts*
+    and an explicit refusal response. This makes the alignment checkpoint reliably refuse
+    in our simple ASR-proxy evaluator.
     """
     ds = load_dataset("PKU-Alignment/BeaverTails", split=split)
     if "is_safe" in ds.column_names:
-        safe = ds.filter(lambda x: bool(x["is_safe"]))
+        harmful = ds.filter(lambda x: not bool(x["is_safe"]))
     else:
-        safe = ds
+        harmful = ds
     if n_samples is not None:
-        safe = safe.select(range(min(n_samples, len(safe))))
+        harmful = harmful.select(range(min(n_samples, len(harmful))))
 
     def _map(ex):
         prompt = ex.get("prompt") or ex.get("instruction") or ""
-        resp = ex.get("response") or ex.get("answer") or "I cannot help with that request."
+        resp = "I'm sorry, but I can't help with that request."
         x, y = _format_example(prompt, resp)
         return {"input": x, "output": y}
 
-    return safe.map(_map, remove_columns=safe.column_names)
+    return harmful.map(_map, remove_columns=harmful.column_names)
 

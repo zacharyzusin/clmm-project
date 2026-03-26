@@ -34,10 +34,10 @@ def evaluate_safety(
     refusal = 0
     for p in harmful_prompts:
         toks = tokenizer(p, return_tensors="pt").to(device)
-        out = model.generate(**toks, max_new_tokens=max_new_tokens, do_sample=False)
-        text = tokenizer.decode(out[0], skip_special_tokens=True)
-        # heuristic: treat everything after prompt as response
-        resp = text[len(p) :].strip() if text.startswith(p) else text
+        in_len = toks["input_ids"].shape[1]
+        out_ids = model.generate(**toks, max_new_tokens=max_new_tokens, do_sample=False)
+        gen_ids = out_ids[0, in_len:]
+        resp = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
         responses.append(resp)
         prefix = resp[:50]
         if any(k.lower() in prefix.lower() for k in REFUSAL_KEYWORDS):
@@ -65,10 +65,11 @@ def evaluate_task_performance(
         prompt = ex["input"]
         gt = ex["output"]
         toks = tokenizer(prompt, return_tensors="pt").to(device)
+        in_len = toks["input_ids"].shape[1]
         with torch.no_grad():
-            out = model.generate(**toks, max_new_tokens=max_new_tokens, do_sample=False)
-        text = tokenizer.decode(out[0], skip_special_tokens=True)
-        resp = text[len(prompt) :].strip() if text.startswith(prompt) else text
+            out_ids = model.generate(**toks, max_new_tokens=max_new_tokens, do_sample=False)
+        gen_ids = out_ids[0, in_len:]
+        resp = tokenizer.decode(gen_ids, skip_special_tokens=True).strip()
 
         if task_type == "sst2":
             pred = "positive" if "positive" in resp.lower() else ("negative" if "negative" in resp.lower() else "")
