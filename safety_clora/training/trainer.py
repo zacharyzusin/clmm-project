@@ -166,7 +166,7 @@ class Trainer:
         batch_size = int(self.cfg.get("batch_size", 4))
         max_seq_len = int(self.cfg.get("max_seq_len", 512))
 
-        model, tokenizer = load_model_and_tokenizer(model_name, device=self.device)
+        model, tokenizer = load_model_and_tokenizer(model_name, device=self.device, trainable=True)
         if torch.cuda.is_available():
             model = model.to(torch.bfloat16)
         model.gradient_checkpointing_enable()
@@ -182,7 +182,7 @@ class Trainer:
             if mode == "clora_safety":
                 if aligned_model_name is None or base_model_name_for_s is None:
                     raise ValueError("clora_safety requires aligned_model_name and base_model_name_for_s")
-                aligned_model, _tok2 = load_model_and_tokenizer(aligned_model_name, device=self.device)
+                aligned_model, _tok2 = load_model_and_tokenizer(aligned_model_name, device=self.device, trainable=False)
                 aligned_model = _maybe_merge_peft(aligned_model)
                 aligned_model.eval()
                 for p in aligned_model.parameters():

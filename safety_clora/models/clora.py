@@ -67,9 +67,12 @@ class CLoRALinear(nn.Module):
         if self.base.bias is not None:
             self.base.bias.requires_grad_(False)
 
+        param_device = self.base.weight.device
+        param_dtype = self.base.weight.dtype
+
         # LoRA params
-        self.A = nn.Parameter(torch.zeros(self.out_features, self.rank))
-        self.B = nn.Parameter(torch.zeros(self.rank, self.in_features))
+        self.A = nn.Parameter(torch.zeros(self.out_features, self.rank, device=param_device, dtype=param_dtype))
+        self.B = nn.Parameter(torch.zeros(self.rank, self.in_features, device=param_device, dtype=param_dtype))
         nn.init.kaiming_uniform_(self.A, a=5**0.5)
         nn.init.zeros_(self.B)
 
@@ -78,29 +81,29 @@ class CLoRALinear(nn.Module):
             s_out = _random_orthonormal_matrix(
                 d=self.out_features,
                 m=min(self.rank, max(1, self.out_features - 1)),
-                device=self.A.device,
-                dtype=self.A.dtype,
+                device=param_device,
+                dtype=param_dtype,
             )
         else:
             if s_out.dim() != 2 or s_out.size(0) != self.out_features:
                 raise ValueError(
                     f"s_out must be 2D with shape ({self.out_features}, m), got {tuple(s_out.shape)}"
                 )
-            s_out = s_out.to(device=self.A.device, dtype=self.A.dtype)
+            s_out = s_out.to(device=param_device, dtype=param_dtype)
 
         if s_in is None:
             s_in = _random_orthonormal_matrix(
                 d=self.in_features,
                 m=min(self.rank, max(1, self.in_features - 1)),
-                device=self.A.device,
-                dtype=self.A.dtype,
+                device=param_device,
+                dtype=param_dtype,
             )
         else:
             if s_in.dim() != 2 or s_in.size(0) != self.in_features:
                 raise ValueError(
                     f"s_in must be 2D with shape ({self.in_features}, m), got {tuple(s_in.shape)}"
                 )
-            s_in = s_in.to(device=self.A.device, dtype=self.A.dtype)
+            s_in = s_in.to(device=param_device, dtype=param_dtype)
 
         self.register_buffer("S_out", s_out, persistent=True)
         self.register_buffer("S_in", s_in, persistent=True)

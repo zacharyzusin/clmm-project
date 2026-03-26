@@ -9,7 +9,7 @@ from transformers import AutoModelForCausalLM, AutoTokenizer
 from peft import PeftModel
 
 
-def load_model_and_tokenizer(checkpoint_path: str, device: torch.device):
+def load_model_and_tokenizer(checkpoint_path: str, device: torch.device, *, trainable: bool = False):
     """
     Loads either:
       - a full Transformers model checkpoint, or
@@ -38,7 +38,7 @@ def load_model_and_tokenizer(checkpoint_path: str, device: torch.device):
             raise FileNotFoundError(f"Missing BASE_MODEL_ID in {ckpt} for PEFT adapter checkpoint.")
         base_id = base_id_file.read_text(encoding="utf-8").strip()
         base = AutoModelForCausalLM.from_pretrained(base_id).to(device)
-        model = PeftModel.from_pretrained(base, ckpt / "adapter").to(device)
+        model = PeftModel.from_pretrained(base, ckpt / "adapter", is_trainable=trainable).to(device)
         return model, tok
 
     model = AutoModelForCausalLM.from_pretrained(ckpt).to(device)
