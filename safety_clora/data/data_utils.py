@@ -4,6 +4,7 @@ from typing import List, Optional, Sequence, Tuple
 
 import csv
 from pathlib import Path
+import urllib.request
 
 from datasets import Dataset, load_dataset
 
@@ -64,9 +65,7 @@ def load_advbench_harmful(n_samples: int = 64, csv_path: Optional[str] = None) -
         csv_path = str(Path(__file__).resolve().parent / "advbench_harmful_behaviors.csv")
     p = Path(csv_path)
     if not p.exists():
-        raise FileNotFoundError(
-            f"AdvBench CSV not found at {p}. Download harmful_behaviors.csv from the llm-attacks repo and save it there."
-        )
+        _maybe_download_advbench_csv(p)
     prompts: List[str] = []
     with p.open("r", newline="", encoding="utf-8") as f:
         reader = csv.DictReader(f)
@@ -78,6 +77,19 @@ def load_advbench_harmful(n_samples: int = 64, csv_path: Optional[str] = None) -
             if len(prompts) >= n_samples:
                 break
     return prompts
+
+
+def _maybe_download_advbench_csv(dest_path: Path) -> None:
+    dest_path.parent.mkdir(parents=True, exist_ok=True)
+    url = "https://raw.githubusercontent.com/llm-attacks/llm-attacks/main/data/advbench/harmful_behaviors.csv"
+    try:
+        urllib.request.urlretrieve(url, dest_path)  # nosec - trusted public dataset location
+    except Exception as e:
+        raise FileNotFoundError(
+            f"AdvBench CSV not found at {dest_path} and auto-download failed. "
+            f"Please download harmful_behaviors.csv from the llm-attacks repo and save it there. "
+            f"Underlying error: {e}"
+        )
 
 
 def load_safety_alignment_data(n_samples: int = 500) -> Dataset:

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 import os
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Dict, Optional, Sequence
 
@@ -9,10 +8,12 @@ import torch
 from torch.utils.data import DataLoader
 from tqdm.auto import tqdm
 from transformers import AutoModelForCausalLM, AutoTokenizer, default_data_collator
+from peft import LoraConfig, get_peft_model, PeftModel
 
 from safety_clora.data.data_utils import load_gsm8k, load_safety_alignment_data, load_sst2
 from safety_clora.models.clora import apply_clora_to_model
 from safety_clora.training.losses import clora_regularization_loss, first_token_kl_loss
+from safety_clora.utils.model_io import load_model_and_tokenizer
 
 
 def _resolve_device() -> torch.device:
@@ -32,16 +33,86 @@ def _set_hf_scratch_env():
 
 def _make_lm_dataset(tokenizer, ds, max_seq_len: int):
     def _tok(ex):
-        full = ex["input"] + ex["output"]
-        toks = tokenizer(
-            full,
+        prompt = ex["input"]
+        answer = ex["output"]
+
+        prompt_ids = tokenizer(
+            prompt,
             truncation=True,
             max_length=max_seq_len,
-        )
-        toks["labels"] = toks["input_ids"].copy()
-        return toks
+            add_special_tokens=True,
+        )["input_ids"]
+
+        # Add a space/newline boundary so the answer doesn't glue to the prompt
+        answer_ids = tokenizer(
+            answer,
+            truncation=True,
+            max_length=max_seq_len,
+            add_special_tokens=False,
+        )["input_ids"]
+
+        # Ensure we end with EOS for stable generation training
+        eos = tokenizer.eos_token_id
+        if eos is not None and (len(answer_ids) == 0 or answer_ids[-1] != eos):
+            answer_ids = answer_ids + [eos]
+
+        input_ids = (prompt_ids + answer_ids)[:max_seq_len]
+        # Mask loss on the prompt portion
+        labels = ([-100] * min(len(prompt_ids), max_seq_len)) + answer_ids
+        labels = labels[:max_seq_len]
+
+        attention_mask = [1] * len(input_ids)
+        return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
     return ds.map(_tok, remove_columns=ds.column_names)
+
+
+def _apply_peft_lora(model, rank: int, alpha: int):
+    if isinstance(model, PeftModel):
+        return model
+    # Target Qwen-like attention linear layers
+    lora_cfg = LoraConfig(
+        r=rank,
+        lora_alpha=alpha,
+        lora_dropout=0.05,
+        bias="none",
+        task_type="CAUSAL_LM",
+        target_modules=["q_proj", "v_proj"],
+    )
+    model = get_peft_model(model, lora_cfg)
+    return model
+
+
+def _maybe_merge_peft(model):
+    # For CLoRA/Safety-CLoRA we want a plain model with real Linear layers.
+    if isinstance(model, PeftModel):
+        return model.merge_and_unload()
+    return model
+
+
+def _save_checkpoint(model, tokenizer, ckpt_dir: Path) -> None:
+    """
+    Saves a checkpoint directory that downstream code can reload.
+
+    - If `model` is a PEFT LoRA model, we save adapters under `adapter/`
+      and write a small marker file so loaders can detect it.
+    - If `model` is a plain Transformers model, we save it directly.
+    """
+    ckpt_dir.mkdir(parents=True, exist_ok=True)
+    tokenizer.save_pretrained(ckpt_dir)
+
+    if isinstance(model, PeftModel):
+        adapter_dir = ckpt_dir / "adapter"
+        adapter_dir.mkdir(parents=True, exist_ok=True)
+        model.save_pretrained(adapter_dir)
+        (ckpt_dir / "CHECKPOINT_TYPE").write_text("peft_lora_adapter\n", encoding="utf-8")
+        base_id = getattr(model.base_model.model.config, "_name_or_path", None) or getattr(
+            model.base_model.model.config, "name_or_path", "unknown"
+        )
+        (ckpt_dir / "BASE_MODEL_ID").write_text(f"{base_id}\n", encoding="utf-8")
+    else:
+        model.save_pretrained(ckpt_dir)
+        (ckpt_dir / "CHECKPOINT_TYPE").write_text("full_model\n", encoding="utf-8")
 
 
 class Trainer:
@@ -75,23 +146,24 @@ class Trainer:
         batch_size = int(self.cfg.get("batch_size", 4))
         max_seq_len = int(self.cfg.get("max_seq_len", 512))
 
-        tokenizer = AutoTokenizer.from_pretrained(model_name, use_fast=True)
-        if tokenizer.pad_token is None:
-            tokenizer.pad_token = tokenizer.eos_token
-
-        model = AutoModelForCausalLM.from_pretrained(model_name, torch_dtype=torch.bfloat16 if torch.cuda.is_available() else torch.float32)
-        model.to(self.device)
+        model, tokenizer = load_model_and_tokenizer(model_name, device=self.device)
+        if torch.cuda.is_available():
+            model = model.to(torch.bfloat16)
         model.gradient_checkpointing_enable()
 
         aligned_model = None
         base_model = None
         cached_aligned_logits = None
 
-        if mode in {"clora_random", "clora_safety"}:
+        if mode == "lora":
+            model = _apply_peft_lora(model, rank=rank, alpha=alpha)
+        elif mode in {"clora_random", "clora_safety"}:
+            model = _maybe_merge_peft(model)
             if mode == "clora_safety":
                 if aligned_model_name is None or base_model_name_for_s is None:
                     raise ValueError("clora_safety requires aligned_model_name and base_model_name_for_s")
-                aligned_model = AutoModelForCausalLM.from_pretrained(aligned_model_name, torch_dtype=torch.float32).to(self.device)
+                aligned_model, _tok2 = load_model_and_tokenizer(aligned_model_name, device=self.device)
+                aligned_model = _maybe_merge_peft(aligned_model)
                 aligned_model.eval()
                 for p in aligned_model.parameters():
                     p.requires_grad_(False)
@@ -109,6 +181,8 @@ class Trainer:
                 base_model=base_model,
                 aligned_model=aligned_model,
             )
+        else:
+            raise ValueError("mode must be one of: lora, clora_random, clora_safety")
 
         tokenized = _make_lm_dataset(tokenizer, train_dataset, max_seq_len=max_seq_len)
         dl = DataLoader(tokenized, batch_size=batch_size, shuffle=True, collate_fn=default_data_collator)
@@ -160,9 +234,7 @@ class Trainer:
                 )
 
             ckpt_dir = save_path / f"epoch_{epoch}"
-            ckpt_dir.mkdir(parents=True, exist_ok=True)
-            model.save_pretrained(ckpt_dir)
-            tokenizer.save_pretrained(ckpt_dir)
+            _save_checkpoint(model, tokenizer, ckpt_dir)
 
         return str(save_path)
 

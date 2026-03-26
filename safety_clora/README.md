@@ -30,22 +30,33 @@ export HF_HUB_CACHE="$HF_HOME/hub"
 - **Baseline LoRA**:
 
 ```bash
-python -m scripts.run_baseline_lora
+python -m safety_clora.scripts.run_baseline_lora
 ```
 
 - **CLoRA (random \(S\))**:
 
 ```bash
-python -m scripts.run_clora
+python -m safety_clora.scripts.run_clora
 ```
 
 - **Safety-CLoRA**:
 
 ```bash
-python -m scripts.run_safety_clora
+python -m safety_clora.scripts.run_safety_clora
 ```
 
 Checkpoints default to `./checkpoints/` (configurable in `configs/default_config.yaml`).
+
+### Run on SLURM
+
+Submit one of the pipelines (edit the conda activate lines inside first):
+
+```bash
+cd "/insomnia001/depts/edu/COMS-E6998-012/zwz2000/clmm-project"
+sbatch safety_clora/scripts/slurm_run_pipeline.sbatch baseline_lora
+sbatch safety_clora/scripts/slurm_run_pipeline.sbatch clora
+sbatch safety_clora/scripts/slurm_run_pipeline.sbatch safety_clora
+```
 
 ### Project layout
 

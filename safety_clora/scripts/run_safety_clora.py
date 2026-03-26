@@ -3,11 +3,11 @@ from __future__ import annotations
 from pathlib import Path
 
 import torch
-from transformers import AutoModelForCausalLM, AutoTokenizer
 
 from safety_clora.data.data_utils import load_beavertails_harmful, load_advbench_harmful
 from safety_clora.evaluation.safety_eval import evaluate_safety, evaluate_task_performance
 from safety_clora.training.trainer import Trainer, load_alignment_dataset, load_task_dataset
+from safety_clora.utils.model_io import load_model_and_tokenizer
 
 
 def main():
@@ -69,18 +69,19 @@ def main():
         ("After alignment", aligned_epoch),
         ("After Safety-CLoRA FT", sclora_dir / "epoch_3"),
     ]:
-        model = AutoModelForCausalLM.from_pretrained(path).to(device)
-        tok = AutoTokenizer.from_pretrained(path, use_fast=True)
-        if tok.pad_token is None:
-            tok.pad_token = tok.eos_token
+        model, tok = load_model_and_tokenizer(str(path), device=device)
         asr, _responses = evaluate_safety(model, tok, harmful_prompts, device=device)
-        task = evaluate_task_performance(model, tok, gsm8k_test, task_type="gsm8k", device=device)
-        rows.append((name, asr, task["accuracy"]))
+        if name == "After alignment":
+            rows.append((name, asr, None))
+        else:
+            task = evaluate_task_performance(model, tok, gsm8k_test, task_type="gsm8k", device=device)
+            rows.append((name, asr, task["accuracy"]))
 
     print("| Checkpoint | ASR (↓ better) | Task Acc (↑ better) |")
     print("|---|---:|---:|")
     for name, asr, acc in rows:
-        print(f\"| {name} | {asr*100:.1f}% | {acc*100:.1f}% | \")
+        acc_str = "N/A" if acc is None else f"{acc*100:.1f}%"
+        print(f"| {name} | {asr*100:.1f}% | {acc_str} |")
 
 
 if __name__ == "__main__":

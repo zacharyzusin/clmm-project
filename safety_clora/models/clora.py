@@ -13,11 +13,10 @@ Safety-CLoRA: CLoRA where S is initialized from the alignment direction
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import Iterable, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import torch
 import torch.nn as nn
-import torch.nn.functional as F
 
 
 @dataclass(frozen=True)
@@ -37,7 +36,11 @@ class CLoRALinear(nn.Module):
     CLoRA regularizer (paper form):
       ||A^T S||_F^2 + ||S^T B^T||_F^2
 
-    Here S is stored as a frozen buffer.
+    In practice, the two terms operate on different spaces:
+      - A is (out, r) so S_out should be (out, m)
+      - B is (r, in) so S_in should be (in, m)
+
+    We therefore store S_out and S_in as frozen buffers.
     """
 
     def __init__(
@@ -45,7 +48,8 @@ class CLoRALinear(nn.Module):
         base_layer: nn.Linear,
         rank: int = 8,
         alpha: int = 16,
-        s_matrix: Optional[torch.Tensor] = None,
+        s_out: Optional[torch.Tensor] = None,
+        s_in: Optional[torch.Tensor] = None,
     ) -> None:
         super().__init__()
         if not isinstance(base_layer, nn.Linear):
@@ -69,22 +73,37 @@ class CLoRALinear(nn.Module):
         nn.init.kaiming_uniform_(self.A, a=5**0.5)
         nn.init.zeros_(self.B)
 
-        # S matrix: if None, random orthonormal columns
-        if s_matrix is None:
-            s_matrix = _random_orthonormal_matrix(
+        # S_out and S_in: if not provided, initialize random orthonormal columns.
+        if s_out is None:
+            s_out = _random_orthonormal_matrix(
                 d=self.out_features,
-                m=min(self.rank, self.out_features),
+                m=min(self.rank, max(1, self.out_features - 1)),
                 device=self.A.device,
                 dtype=self.A.dtype,
             )
         else:
-            if s_matrix.dim() != 2 or s_matrix.size(0) != self.out_features:
+            if s_out.dim() != 2 or s_out.size(0) != self.out_features:
                 raise ValueError(
-                    f"s_matrix must be 2D with shape ({self.out_features}, m), got {tuple(s_matrix.shape)}"
+                    f"s_out must be 2D with shape ({self.out_features}, m), got {tuple(s_out.shape)}"
                 )
-            s_matrix = s_matrix.to(device=self.A.device, dtype=self.A.dtype)
+            s_out = s_out.to(device=self.A.device, dtype=self.A.dtype)
 
-        self.register_buffer("S", s_matrix, persistent=True)
+        if s_in is None:
+            s_in = _random_orthonormal_matrix(
+                d=self.in_features,
+                m=min(self.rank, max(1, self.in_features - 1)),
+                device=self.A.device,
+                dtype=self.A.dtype,
+            )
+        else:
+            if s_in.dim() != 2 or s_in.size(0) != self.in_features:
+                raise ValueError(
+                    f"s_in must be 2D with shape ({self.in_features}, m), got {tuple(s_in.shape)}"
+                )
+            s_in = s_in.to(device=self.A.device, dtype=self.A.dtype)
+
+        self.register_buffer("S_out", s_out, persistent=True)
+        self.register_buffer("S_in", s_in, persistent=True)
 
     def forward(self, x: torch.Tensor) -> torch.Tensor:
         base_out = self.base(x)
@@ -92,23 +111,10 @@ class CLoRALinear(nn.Module):
         return base_out + self.scaling * lora_out
 
     def clora_reg_loss(self) -> torch.Tensor:
-        # A: (out, r)  S: (out, m) -> A^T S: (r, m)
-        a_term = (self.A.t() @ self.S).pow(2).sum()
-        # B: (r, in)   B^T: (in, r)  S^T B^T requires matching dims.
-        # The original paper uses S with shapes that match the specific formulation.
-        # For this implementation we use the common variant:
-        #   ||A^T S||_F^2 + ||B S||_F^2
-        # where S is (in, m) would be needed for the second term.
-        #
-        # To keep a single S buffer per layer and still penalize both factors,
-        # we build an input-space S_in on the fly (random but deterministic per-module)
-        # when S has incompatible shape. For Safety-CLoRA we mainly care about the A-side
-        # constraint (directional control in output space).
-        if self.S.size(0) == self.in_features:
-            b_term = (self.B @ self.S).pow(2).sum()
-        else:
-            # fall back: penalize B magnitude (lightweight proxy)
-            b_term = self.B.pow(2).sum()
+        # ||A^T S_out||_F^2
+        a_term = (self.A.t() @ self.S_out).pow(2).sum()
+        # ||S_in^T B^T||_F^2 == ||B S_in||_F^2
+        b_term = (self.B @ self.S_in).pow(2).sum()
         return a_term + b_term
 
 
@@ -155,48 +161,58 @@ def compute_orthogonal_complement_basis(
     return Q[:, :n_vectors].contiguous()
 
 
-def build_safety_s_matrix(
+def build_safety_s_matrices(
     base_model: nn.Module,
     aligned_model: nn.Module,
     module_name: str,
     rank: int,
     device: torch.device,
-) -> Optional[torch.Tensor]:
+) -> Tuple[Optional[torch.Tensor], Optional[torch.Tensor]]:
     """
-    Compute an S matrix for a specific Linear module, using the module's weight parameter name:
+    Compute (S_out, S_in) for a specific Linear module, using the module's weight parameter name:
       {module_name}.weight
 
-    We compute an orthogonal-complement basis in the flattened weight space, then reshape to
-    (out_features, m) by projecting to output space for tractability.
+    Practical approximation (tractable):
+    - Compute dW = W_aligned - W_base (out, in)
+    - Use its dominant left singular vector u_out (out,) as the alignment direction in output space.
+    - Use its dominant right singular vector v_in (in,) as the alignment direction in input space.
+    - Set:
+        S_out = basis of orthogonal complement to u_out  (out, m)
+        S_in  = basis of orthogonal complement to v_in   (in, m)
 
-    Practical approximation:
-    - Full weight space is huge; we instead create S in output space (out_features x m).
-    - We do this by computing the output-space direction as the top left singular vector
-      of d_aligned_W and then building an orthogonal basis around it.
+    This matches the intent of "penalize updates orthogonal to the alignment direction"
+    without ever constructing bases in the full flattened (out*in)-dimensional space.
     """
     weight_name = f"{module_name}.weight"
     try:
         base_w = dict(base_model.named_parameters())[weight_name].detach().to(device=device, dtype=torch.float32)
         aligned_w = dict(aligned_model.named_parameters())[weight_name].detach().to(device=device, dtype=torch.float32)
     except KeyError:
-        return None
+        return None, None
 
     dW = aligned_w - base_w  # (out, in)
     out_features = dW.size(0)
-    if out_features < 2:
-        return None
+    in_features = dW.size(1)
+    if out_features < 2 or in_features < 2:
+        return None, None
 
-    # Approximate direction in output space: dominant left singular vector of dW.
     try:
-        U, Svals, _Vh = torch.linalg.svd(dW, full_matrices=False)
+        U, _Svals, Vh = torch.linalg.svd(dW, full_matrices=False)
         u_out = U[:, 0]  # (out,)
+        v_in = Vh[0, :]  # (in,)
     except Exception:
         # fallback: mean over input dim
         u_out = dW.mean(dim=1)
+        v_in = dW.mean(dim=0)
 
     u_out = u_out / u_out.norm(p=2).clamp_min(1e-12)
-    S_out = compute_orthogonal_complement_basis(u_out, n_vectors=min(rank, out_features - 1), device=device)
-    return S_out  # (out, m)
+    v_in = v_in / v_in.norm(p=2).clamp_min(1e-12)
+
+    m_out = min(rank, out_features - 1)
+    m_in = min(rank, in_features - 1)
+    S_out = compute_orthogonal_complement_basis(u_out, n_vectors=m_out, device=device) if m_out > 0 else None
+    S_in = compute_orthogonal_complement_basis(v_in, n_vectors=m_in, device=device) if m_in > 0 else None
+    return S_out, S_in
 
 
 def apply_clora_to_model(
@@ -232,9 +248,10 @@ def apply_clora_to_model(
         if parent is None:
             continue
 
-        s_mat = None
+        s_out = None
+        s_in = None
         if mode == "safety":
-            s_mat = build_safety_s_matrix(
+            s_out, s_in = build_safety_s_matrices(
                 base_model=base_model,
                 aligned_model=aligned_model,
                 module_name=full_name,
@@ -242,7 +259,7 @@ def apply_clora_to_model(
                 device=next(model.parameters()).device,
             )
 
-        wrapped = CLoRALinear(module, rank=rank, alpha=alpha, s_matrix=s_mat)
+        wrapped = CLoRALinear(module, rank=rank, alpha=alpha, s_out=s_out, s_in=s_in)
         setattr(parent, child_name, wrapped)
         clora_modules.append(wrapped)
 
