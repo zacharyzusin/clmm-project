@@ -110,6 +110,15 @@ def _maybe_merge_peft(model):
     return model
 
 
+def _freeze_all_but_clora(model):
+    for p in model.parameters():
+        p.requires_grad_(False)
+    for m in model.modules():
+        if hasattr(m, "A") and hasattr(m, "B"):
+            m.A.requires_grad_(True)
+            m.B.requires_grad_(True)
+
+
 def _save_checkpoint(model, tokenizer, ckpt_dir: Path) -> None:
     """
     Saves a checkpoint directory that downstream code can reload.
@@ -201,6 +210,7 @@ class Trainer:
                 base_model=base_model,
                 aligned_model=aligned_model,
             )
+            _freeze_all_but_clora(model)
         else:
             raise ValueError("mode must be one of: lora, clora_random, clora_safety")
 

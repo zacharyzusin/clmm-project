@@ -11,13 +11,16 @@ from safety_clora.models.clora import CLoRALinear
 
 def clora_regularization_loss(model: nn.Module) -> torch.Tensor:
     reg = None
+    n = 0
     for m in model.modules():
         if isinstance(m, CLoRALinear):
             loss = m.clora_reg_loss()
             reg = loss if reg is None else (reg + loss)
+            n += 1
     if reg is None:
         return torch.tensor(0.0, device=next(model.parameters()).device)
-    return reg
+    # Normalize by number of CLoRA modules so lambda has stable meaning.
+    return reg / max(1, n)
 
 
 @torch.no_grad()
