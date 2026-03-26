@@ -9,8 +9,12 @@
 
 set -euo pipefail
 
-PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
-cd "$PROJECT_ROOT"
+# This script lives at: safety_clora/scripts/slurm_run_pipeline.sbatch
+# We want the repo root (so `python -m safety_clora...` works).
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../../.." && pwd)"
+cd "$REPO_ROOT"
+
+export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
 
 # --- HuggingFace caches to per-job local scratch ---
 export HF_HOME="${TMPDIR:-/var/tmp}/hf"
