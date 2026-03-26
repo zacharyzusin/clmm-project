@@ -9,9 +9,10 @@
 
 set -euo pipefail
 
-# This script lives at: clmm-project/safety_clora/scripts/slurm_run_pipeline.sbatch
-# Repo root is two levels up from this script's directory.
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+# IMPORTANT: SLURM copies the script to a spool directory before execution, so
+# resolving paths via ${BASH_SOURCE[0]} will NOT point at your repo.
+# Use the submission directory as the repo root.
+REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_ROOT"
 
 # --- HuggingFace caches to per-job local scratch ---
