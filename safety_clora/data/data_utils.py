@@ -42,8 +42,14 @@ def load_sst2(split: str, n_samples: Optional[int] = None) -> Dataset:
     return ds.map(_map, remove_columns=ds.column_names)
 
 
-def load_beavertails_harmful(n_samples: int = 64) -> List[str]:
-    ds = load_dataset("PKU-Alignment/BeaverTails", split="train")
+def load_beavertails_harmful(n_samples: int = 64, split: str = "30k_train") -> List[str]:
+    """
+    Returns harmful prompts from BeaverTails.
+
+    Note: the HF dataset exposes splits like: 30k_train/30k_test/330k_train/330k_test.
+    We default to the smaller 30k split for faster iteration.
+    """
+    ds = load_dataset("PKU-Alignment/BeaverTails", split=split)
     # BeaverTails has a boolean "is_safe" field in many versions.
     if "is_safe" in ds.column_names:
         harmful = ds.filter(lambda x: not x["is_safe"])
@@ -92,12 +98,12 @@ def _maybe_download_advbench_csv(dest_path: Path) -> None:
         )
 
 
-def load_safety_alignment_data(n_samples: int = 500) -> Dataset:
+def load_safety_alignment_data(n_samples: int = 500, split: str = "30k_train") -> Dataset:
     """
     Small safety SFT dataset using BeaverTails safe examples.
     Uses (prompt -> response) pairs if available; otherwise builds a generic refusal.
     """
-    ds = load_dataset("PKU-Alignment/BeaverTails", split="train")
+    ds = load_dataset("PKU-Alignment/BeaverTails", split=split)
     if "is_safe" in ds.column_names:
         safe = ds.filter(lambda x: bool(x["is_safe"]))
     else:
