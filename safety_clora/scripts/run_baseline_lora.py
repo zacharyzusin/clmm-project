@@ -1,0 +1,72 @@
+from __future__ import annotations
+
+from pathlib import Path
+
+import torch
+from transformers import AutoModelForCausalLM, AutoTokenizer
+
+from safety_clora.data.data_utils import load_advbench_harmful
+from safety_clora.evaluation.safety_eval import evaluate_safety, evaluate_task_performance
+from safety_clora.training.trainer import Trainer, load_alignment_dataset, load_task_dataset
+
+
+def main():
+    root = Path(__file__).resolve().parents[1]
+    ckpt_root = root / "checkpoints"
+    ckpt_root.mkdir(parents=True, exist_ok=True)
+
+    # Stage 1: Alignment SFT
+    cfg_align = {
+        "model_name": "Qwen/Qwen3-0.6B",
+        "mode": "lora",
+        "lr": 2e-4,
+        "epochs": 2,
+        "batch_size": 4,
+        "max_seq_len": 512,
+    }
+    t1 = Trainer(cfg_align)
+    align_ds = load_alignment_dataset(n_samples=500)
+    aligned_dir = ckpt_root / "qwen_aligned"
+    t1.train(train_dataset=align_ds, save_dir=str(aligned_dir))
+
+    # Stage 2: Capability FT baseline LoRA (no CLoRA reg)
+    cfg_ft = {
+        "model_name": str(aligned_dir / "epoch_2"),
+        "mode": "lora",
+        "lr": 2e-4,
+        "epochs": 3,
+        "batch_size": 4,
+        "max_seq_len": 512,
+    }
+    t2 = Trainer(cfg_ft)
+    task_ds = load_task_dataset("gsm8k", split="train", n_samples=1000)
+    ft_dir = ckpt_root / "qwen_lora_gsm8k"
+    t2.train(train_dataset=task_ds, save_dir=str(ft_dir))
+
+    # Stage 3: Evaluation
+    device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+    harmful_prompts = load_advbench_harmful(n_samples=64)
+    gsm8k_test = load_task_dataset("gsm8k", split="test", n_samples=200)
+
+    rows = []
+    for name, path in [
+        ("After alignment", aligned_dir / "epoch_2"),
+        ("After baseline LoRA FT", ft_dir / "epoch_3"),
+    ]:
+        model = AutoModelForCausalLM.from_pretrained(path).to(device)
+        tok = AutoTokenizer.from_pretrained(path, use_fast=True)
+        if tok.pad_token is None:
+            tok.pad_token = tok.eos_token
+        asr, _responses = evaluate_safety(model, tok, harmful_prompts, device=device)
+        task = evaluate_task_performance(model, tok, gsm8k_test, task_type="gsm8k", device=device)
+        rows.append((name, asr, task["accuracy"]))
+
+    print("| Checkpoint | ASR (↓ better) | Task Acc (↑ better) |")
+    print("|---|---:|---:|")
+    for name, asr, acc in rows:
+        print(f"| {name} | {asr*100:.1f}% | {acc*100:.1f}% |")
+
+
+if __name__ == "__main__":
+    main()
+

@@ -1,0 +1,25 @@
+model_name: Qwen/Qwen3-0.6B
+aligned_model_name: null  # filled by scripts (Stage 1 output)
+
+rank: 8
+alpha: 16
+lam: 0.5
+gamma: 0.1
+
+mode: lora  # lora | clora_random | clora_safety
+
+lr: 0.0002
+epochs: 1
+batch_size: 4
+max_seq_len: 512
+
+train_samples: 500
+eval_harmful_prompts: 64
+
+checkpoint_dir: checkpoints
+
+task:
+  name: gsm8k  # gsm8k | sst2
+  train_samples: 1000
+  eval_split: test
+
