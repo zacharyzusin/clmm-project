@@ -16,8 +16,15 @@ set -euo pipefail
 REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_ROOT"
 
-# --- HuggingFace caches to per-job local scratch ---
-export HF_HOME="${TMPDIR:-/var/tmp}/hf"
+# --- HuggingFace caches ---
+# Prefer per-job scratch (fast, avoids quota) when TMPDIR is a real per-job directory.
+# Fall back to persistent home cache so previously-downloaded models are reused
+# instead of re-downloading to a volatile /tmp that may be cleaned mid-download.
+if [ -n "${TMPDIR:-}" ] && [ "$TMPDIR" != "/tmp" ] && [ -d "$TMPDIR" ]; then
+    export HF_HOME="$TMPDIR/hf"
+else
+    export HF_HOME="${HOME}/.cache/huggingface"
+fi
 export TRANSFORMERS_CACHE="$HF_HOME/transformers"
 export HF_DATASETS_CACHE="$HF_HOME/datasets"
 export HF_HUB_CACHE="$HF_HOME/hub"

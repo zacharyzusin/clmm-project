@@ -96,7 +96,10 @@ def main() -> None:
     out_dir.mkdir(parents=True, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-    harmful_prompts = load_advbench_harmful(n_samples=args.advbench_n)
+    adv_n = args.advbench_n
+    if adv_n is not None and adv_n <= 0:
+        adv_n = None  # 0 or negative → load all ~520
+    harmful_prompts = load_advbench_harmful(n_samples=adv_n)
     print(f"[generate_responses] {len(harmful_prompts)} AdvBench prompts | device={device}", flush=True)
 
     summary_rows = []
