@@ -13,7 +13,7 @@ Safety-CLoRA: CLoRA where S is initialized from the alignment direction
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -199,23 +199,91 @@ def build_safety_s_matrices(
     if out_features < 2 or in_features < 2:
         return None, None
 
-    try:
-        U, _Svals, Vh = torch.linalg.svd(dW, full_matrices=False)
-        u_out = U[:, 0]  # (out,)
-        v_in = Vh[0, :]  # (in,)
-    except Exception:
-        # fallback: mean over input dim
-        u_out = dW.mean(dim=1)
-        v_in = dW.mean(dim=0)
-
-    u_out = u_out / u_out.norm(p=2).clamp_min(1e-12)
-    v_in = v_in / v_in.norm(p=2).clamp_min(1e-12)
+    u_out, v_in = dominant_directions_from_weight_delta(dW)
 
     m_out = min(rank, out_features - 1)
     m_in = min(rank, in_features - 1)
     S_out = compute_orthogonal_complement_basis(u_out, n_vectors=m_out, device=device) if m_out > 0 else None
     S_in = compute_orthogonal_complement_basis(v_in, n_vectors=m_in, device=device) if m_in > 0 else None
     return S_out, S_in
+
+
+def dominant_directions_from_weight_delta(dW: torch.Tensor) -> Tuple[torch.Tensor, torch.Tensor]:
+    """
+    Dominant left/right singular directions of ΔW (same convention as Safety-CLoRA S construction).
+    u_out: (out,), v_in: (in,), both unit-norm.
+    """
+    try:
+        U, _Svals, Vh = torch.linalg.svd(dW, full_matrices=False)
+        u_out = U[:, 0]
+        v_in = Vh[0, :]
+    except Exception:
+        u_out = dW.mean(dim=1)
+        v_in = dW.mean(dim=0)
+    u_out = u_out / u_out.norm(p=2).clamp_min(1e-12)
+    v_in = v_in / v_in.norm(p=2).clamp_min(1e-12)
+    return u_out, v_in
+
+
+def column_cosine_stats(S: torch.Tensor, u: torch.Tensor) -> Tuple[float, float]:
+    """Max and mean absolute cosine |u^T s_j| over columns s_j of S. Expect ~0 if S ⊥ u."""
+    if S is None or S.numel() == 0:
+        return float("nan"), float("nan")
+    u = u.flatten().to(dtype=S.dtype, device=S.device)
+    u = u / u.norm(p=2).clamp_min(1e-12)
+    dots = (S.T @ u).abs()
+    return float(dots.max().item()), float(dots.mean().item())
+
+
+def safety_s_orthogonality_metrics(
+    base_model: nn.Module,
+    aligned_model: nn.Module,
+    rank: int,
+    device: torch.device,
+    max_modules: Optional[int] = None,
+) -> List[Dict[str, float | str]]:
+    """
+    For each q_proj/v_proj Linear, report how orthogonal S_out/S_in are to the alignment
+    directions u_out / v_in used to build them (should be near 0 if construction is correct).
+    """
+    rows: List[Dict[str, float | str]] = []
+    n = 0
+    for full_name, module in list(base_model.named_modules()):
+        if not isinstance(module, nn.Linear):
+            continue
+        if not any(full_name.endswith(suf) for suf in ("q_proj", "v_proj")):
+            continue
+        s_out, s_in = build_safety_s_matrices(
+            base_model=base_model,
+            aligned_model=aligned_model,
+            module_name=full_name,
+            rank=rank,
+            device=device,
+        )
+        if s_out is None and s_in is None:
+            continue
+        weight_name = f"{full_name}.weight"
+        base_w = dict(base_model.named_parameters())[weight_name].detach().to(device=device, dtype=torch.float32)
+        aligned_w = dict(aligned_model.named_parameters())[weight_name].detach().to(device=device, dtype=torch.float32)
+        dW = aligned_w - base_w
+        u_out, v_in = dominant_directions_from_weight_delta(dW)
+
+        mx_o, mn_o = column_cosine_stats(s_out, u_out) if s_out is not None else (float("nan"), float("nan"))
+        mx_i, mn_i = column_cosine_stats(s_in, v_in) if s_in is not None else (float("nan"), float("nan"))
+
+        rows.append(
+            {
+                "module": full_name,
+                "max_abs_cos_Sout_uout": mx_o,
+                "mean_abs_cos_Sout_uout": mn_o,
+                "max_abs_cos_Sin_vin": mx_i,
+                "mean_abs_cos_Sin_vin": mn_i,
+            }
+        )
+        n += 1
+        if max_modules is not None and n >= max_modules:
+            break
+    return rows
 
 
 def apply_clora_to_model(
@@ -267,6 +335,34 @@ def apply_clora_to_model(
         clora_modules.append(wrapped)
 
     return model, clora_modules
+
+
+def merge_clora_to_base_linear(model: nn.Module) -> nn.Module:
+    """
+    Merge each CLoRALinear into its underlying nn.Linear so the resulting model
+    can be saved/loaded by HuggingFace without custom CLoRALinear keys.
+
+    For each module:
+      W_merged = W_base + scaling * (A @ B)
+    and then the CLoRALinear wrapper is replaced with its `base` Linear.
+    """
+    # Iterate over a copy; we will replace modules in-place.
+    for full_name, module in list(model.named_modules()):
+        if not isinstance(module, CLoRALinear):
+            continue
+
+        parent, child_name = _get_parent_module(model, full_name)
+        if parent is None:
+            continue
+
+        # Compute delta in float32 for stability, then cast to base dtype.
+        delta_w = (module.A.float() @ module.B.float()) * float(module.scaling)  # (out, in)
+        module.base.weight.data = module.base.weight.data + delta_w.to(module.base.weight.dtype)
+
+        # Replace wrapper with standard Linear so checkpoint loading is compatible.
+        setattr(parent, child_name, module.base)
+
+    return model
 
 
 def _random_orthonormal_matrix(d: int, m: int, device: torch.device, dtype: torch.dtype) -> torch.Tensor:

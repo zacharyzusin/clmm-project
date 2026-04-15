@@ -10,3 +10,29 @@ hf_cache/
 *.bin
 
 .cache/
+
+# Slurm output files
+slurm-*.out
+
+# Dev/internal docs
+CLAUDE.md
+
+# Debug and diagnostic scripts (not part of published codebase)
+safety_clora/scripts/run_clora_scale_diagnostics.py
+safety_clora/scripts/run_eval_alignment_checkpoint.py
+safety_clora/scripts/run_eval_lambda_ablation.py
+safety_clora/scripts/run_eval_safety_gamma.py
+safety_clora/scripts/run_lambda_ablation_stage2.py
+safety_clora/scripts/run_lambda_sweep.py
+safety_clora/scripts/run_s_orthogonality_diagnostic.py
+safety_clora/scripts/run_safety_gamma_sweep.py
+safety_clora/scripts/run_stage1_label_mask_diagnostic.py
+safety_clora/scripts/run_stage1_overfit_debug.py
+safety_clora/scripts/run_stage2_quickcheck.py
+safety_clora/scripts/slurm_stage2_quickcheck.sbatch
+safety_clora/scripts/submit_gamma_sweep_parallel.sh
+safety_clora/scripts/run_shared_comparison.py
+
+# Duplicate/root-level result files (canonical copies live in safety_clora/)
+/subspace_overlap.csv
+/subspace_overlap_all.csv
