@@ -16,7 +16,7 @@ Usage (no GPU needed):
   python -m safety_clora.scripts.run_subspace_analysis \
     --ckpt-root safety_clora/checkpoints \
     --base-model-cache ~/.cache/huggingface/hub/models--Qwen--Qwen3-0.6B/snapshots/<hash> \
-    --out-csv subspace_overlap.csv
+    --out-csv results/subspace_overlap.csv
 """
 
 from __future__ import annotations
@@ -314,8 +314,8 @@ def main() -> None:
     ap.add_argument(
         "--out-csv",
         type=str,
-        default="subspace_overlap.csv",
-        help="Output CSV file path.",
+        default="results/subspace_overlap.csv",
+        help="Output CSV file path (relative to CWD or absolute).",
     )
     ap.add_argument(
         "--methods",
