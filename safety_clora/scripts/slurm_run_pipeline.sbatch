@@ -33,7 +33,9 @@ export PYTHONPATH="$REPO_ROOT:${PYTHONPATH:-}"
 python -c "import torch; print('torch', torch.__version__, 'cuda', torch.cuda.is_available())"
 
 # Choose one:
-#   stage1_alignment_retrain | shared_stage2_comparison | olora_comparison | sequential_multitask
+#   stage1_alignment_retrain | stage1_llama
+#   shared_stage2_comparison | olora_comparison | sequential_multitask
+#   generate_responses | llama_guard_eval
 # Remaining CLI args are forwarded to the chosen script.
 PIPELINE="${1:-stage1_alignment_retrain}"
 if [ "$#" -ge 1 ]; then
@@ -44,6 +46,9 @@ case "$PIPELINE" in
   stage1_alignment_retrain)
     python -m safety_clora.scripts.run_stage1_alignment_retrain "$@"
     ;;
+  stage1_llama)
+    python -m safety_clora.scripts.run_stage1_llama "$@"
+    ;;
   shared_stage2_comparison)
     python -m safety_clora.scripts.run_shared_stage2_comparison "$@"
     ;;
@@ -53,9 +58,15 @@ case "$PIPELINE" in
   sequential_multitask)
     python -m safety_clora.scripts.run_sequential_multitask "$@"
     ;;
+  generate_responses)
+    python -m safety_clora.scripts.run_generate_responses "$@"
+    ;;
+  llama_guard_eval)
+    python -m safety_clora.scripts.run_llama_guard_eval "$@"
+    ;;
   *)
     echo "Unknown pipeline: $PIPELINE"
-    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|shared_stage2_comparison|olora_comparison|sequential_multitask]"
+    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval]"
     exit 2
     ;;
 esac

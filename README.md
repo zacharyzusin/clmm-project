@@ -49,31 +49,38 @@ Key findings: SST-2 (a classification task) catastrophically triggers collapse i
 ## Project Layout
 
 ```
-safety_clora/
-├── models/
-│   ├── clora.py          — CLoRALinear, S-matrix construction, merge utilities
-│   └── olora.py          — OLoRALinear, PEFT adapter extraction, merge utilities
-├── data/
-│   ├── data_utils.py     — load_gsm8k(), load_sst2(), load_mbpp(), load_advbench_harmful(), ...
-│   └── advbench_harmful_behaviors.csv
-├── training/
-│   ├── trainer.py        — Trainer class (modes: lora, clora_random, clora_safety,
-│   │                        olora_standard, olora_safety)
-│   └── losses.py         — clora_regularization_loss(), first_token_kl_loss()
-├── evaluation/
-│   └── safety_eval.py    — evaluate_safety() (ASR), evaluate_task_performance()
-├── utils/
-│   └── model_io.py       — load_model_and_tokenizer() (PEFT + full model checkpoints)
-├── scripts/
-│   ├── run_stage1_alignment_retrain.py    — Stage-1 alignment SFT
-│   ├── run_shared_stage2_comparison.py    — 2-task CLoRA/Safety-CLoRA comparison
-│   ├── run_olora_comparison.py            — 2-task O-LoRA/Safety-O-LoRA comparison
-│   ├── run_sequential_multitask.py        — Sequential T2→T3→T4 evaluation
-│   ├── run_subspace_analysis.py           — Subspace overlap analysis (produces subspace_overlap.csv)
-│   └── slurm_run_pipeline.sbatch         — SLURM dispatcher for all scripts above
-├── subspace_overlap.csv                  — Subspace overlap results (840 rows)
-└── configs/
-    └── default_config.yaml
+clmm-project/
+├── README.md
+├── requirements.txt
+├── configs/
+│   └── default_config.yaml
+├── results/
+│   └── subspace_overlap.csv              — Subspace overlap results (840 rows)
+└── safety_clora/                         — Python package
+    ├── models/
+    │   ├── clora.py          — CLoRALinear, S-matrix construction, merge utilities
+    │   └── olora.py          — OLoRALinear, PEFT adapter extraction, merge utilities
+    ├── data/
+    │   ├── data_utils.py     — load_gsm8k(), load_sst2(), load_mbpp(), load_advbench_harmful(), ...
+    │   └── advbench_harmful_behaviors.csv
+    ├── training/
+    │   ├── trainer.py        — Trainer class (modes: lora, clora_random, clora_safety,
+    │   │                        olora_standard, olora_safety)
+    │   └── losses.py         — clora_regularization_loss(), first_token_kl_loss()
+    ├── evaluation/
+    │   └── safety_eval.py    — evaluate_safety() (ASR), evaluate_task_performance()
+    ├── utils/
+    │   └── model_io.py       — load_model_and_tokenizer() (PEFT + full model checkpoints)
+    └── scripts/
+        ├── run_stage1_alignment_retrain.py    — Stage-1 alignment SFT (Qwen)
+        ├── run_stage1_llama.py                — Stage-1 alignment SFT (Llama-3.2-3B-Instruct)
+        ├── run_shared_stage2_comparison.py    — 2-task CLoRA/Safety-CLoRA comparison
+        ├── run_olora_comparison.py            — 2-task O-LoRA/Safety-O-LoRA comparison
+        ├── run_sequential_multitask.py        — Sequential T2→T3→T4 evaluation
+        ├── run_subspace_analysis.py           — Subspace overlap analysis
+        ├── run_generate_responses.py          — Save model responses to JSON (pre-LlamaGuard)
+        ├── run_llama_guard_eval.py            — Llama-Guard-3-8B re-evaluation of saved responses
+        └── slurm_run_pipeline.sbatch         — SLURM dispatcher for all scripts above
 ```
 
 ---
@@ -151,7 +158,7 @@ sbatch safety_clora/scripts/slurm_run_pipeline.sbatch sequential_multitask \
 python -m safety_clora.scripts.run_subspace_analysis \
   --ckpt-root safety_clora/checkpoints \
   --base-model-cache <path/to/Qwen3-0.6B> \
-  --out-csv safety_clora/subspace_overlap.csv
+  --out-csv results/subspace_overlap.csv
 ```
 
 ---
