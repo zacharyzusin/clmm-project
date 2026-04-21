@@ -90,6 +90,12 @@ def main() -> None:
         help="Skip ASR eval on Stage-1 checkpoint (saves time in split jobs).",
     )
     ap.add_argument("--loss-diag-every", type=int, default=0)
+    ap.add_argument(
+        "--results-json",
+        type=str,
+        default=None,
+        help="If set, write eval results to this JSON file (for multi-seed aggregation).",
+    )
     args = ap.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -134,7 +140,7 @@ def main() -> None:
 
     # --- Checkpoint directories ---
     # Baseline LoRA reuses the same dir as run_shared_stage2_comparison.py so we don't retrain.
-    baseline_dir = ckpt_root / "qwen_lora_gsm8k_shared_seed42_mergefix"
+    baseline_dir = ckpt_root / f"qwen_lora_gsm8k_shared_seed{seed}_mergefix"
     olora_dir = ckpt_root / f"qwen_olora_gsm8k_seed{seed}_lam{args.lam_orth:g}"
     safety_olora_dir = ckpt_root / f"qwen_safety_olora_gsm8k_seed{seed}_lams{args.lam_safety:g}"
 
@@ -269,6 +275,26 @@ def main() -> None:
                 print(f"| {name} | N/A | N/A |")
             else:
                 print(f"| {name} | {asr*100:.1f}% | {acc*100:.1f}% |")
+
+        if args.results_json:
+            import json
+            out: dict = {"seed": seed}
+            for name, asr, acc in rows:
+                if name == "After alignment":
+                    key = "after_alignment"
+                elif name == "Baseline LoRA":
+                    key = "baseline_lora"
+                elif name.startswith("O-LoRA"):
+                    key = "olora"
+                elif name.startswith("Safety-O-LoRA"):
+                    key = "safety_olora"
+                else:
+                    key = name.lower().replace(" ", "_")
+                out[key] = {"asr": asr} if acc is None else {"asr": asr, "gsm8k_acc": acc}
+            from pathlib import Path as _Path
+            _Path(args.results_json).parent.mkdir(parents=True, exist_ok=True)
+            _Path(args.results_json).write_text(json.dumps(out, indent=2))
+            print(f"[olora_comparison] results written to {args.results_json}")
 
 
 if __name__ == "__main__":

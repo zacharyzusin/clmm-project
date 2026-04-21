@@ -151,13 +151,18 @@ def compute_orthogonal_complement_basis(
     Build S whose columns are orthonormal and orthogonal to `direction_vector`.
     direction_vector: 1D unit vector (d,)
     returns: S matrix (d, n_vectors)
+
+    Uses a fixed-seed generator so S is fully determined by the input vector,
+    independent of the global RNG state (training seed).
     """
     u = direction_vector.to(device=device, dtype=torch.float32).flatten()
     d = u.numel()
     n_vectors = int(min(n_vectors, max(1, d - 1)))
 
-    # Random matrix -> project out u -> QR.
-    R = torch.randn(d, n_vectors, device=device, dtype=torch.float32)
+    # Fixed-seed generator: S matrix depends only on the input, not training seed.
+    gen = torch.Generator(device=device)
+    gen.manual_seed(0)
+    R = torch.randn(d, n_vectors, device=device, dtype=torch.float32, generator=gen)
     proj = u[:, None] * (u[None, :] @ R)  # (d, n_vectors)
     R_orth = R - proj
     Q, _ = torch.linalg.qr(R_orth, mode="reduced")

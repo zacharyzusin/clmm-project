@@ -43,14 +43,14 @@ def _discover_latest_aligned_checkpoint(ckpt_root: Path, seed: int) -> Path:
     return best_path
 
 
-def _safety_mergefix_dir(ckpt_root: Path, safety_gamma: float) -> Path:
+def _safety_mergefix_dir(ckpt_root: Path, safety_gamma: float, seed: int = 42) -> Path:
     """Separate dirs so γ=0 ablation and sweeps do not overwrite the default Safety-CLoRA run."""
     if abs(safety_gamma - 0.05) < 1e-6:
-        return ckpt_root / "qwen_safety_clora_gsm8k_shared_seed42_mergefix"
+        return ckpt_root / f"qwen_safety_clora_gsm8k_shared_seed{seed}_mergefix"
     if abs(safety_gamma) < 1e-12:
-        return ckpt_root / "qwen_safety_clora_gsm8k_shared_seed42_mergefix_kl0"
+        return ckpt_root / f"qwen_safety_clora_gsm8k_shared_seed{seed}_mergefix_kl0"
     tag = f"{safety_gamma:.6g}".replace(".", "p").replace("-", "m")
-    return ckpt_root / f"qwen_safety_clora_gsm8k_shared_seed42_mergefix_g{tag}"
+    return ckpt_root / f"qwen_safety_clora_gsm8k_shared_seed{seed}_mergefix_g{tag}"
 
 
 def _poison_dir_suffix(poison_ratio: float) -> str:
@@ -142,6 +142,12 @@ def main():
         choices=["advbench", "beavertails"],
         help="Where to sample harmful prompts for poisoned rows.",
     )
+    parser.add_argument(
+        "--results-json",
+        type=str,
+        default=None,
+        help="If set, write eval results to this JSON file (for multi-seed aggregation).",
+    )
     args = parser.parse_args()
 
     root = Path(__file__).resolve().parents[1]
@@ -192,9 +198,9 @@ def main():
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
-    baseline_dir = ckpt_root / f"qwen_lora_gsm8k_shared_seed42_mergefix{poison_suffix}"
-    clora_dir = ckpt_root / f"qwen_clora_gsm8k_shared_seed42_mergefix{poison_suffix}"
-    sclora_dir = _safety_mergefix_dir(ckpt_root, safety_gamma)
+    baseline_dir = ckpt_root / f"qwen_lora_gsm8k_shared_seed{seed}_mergefix{poison_suffix}"
+    clora_dir = ckpt_root / f"qwen_clora_gsm8k_shared_seed{seed}_mergefix{poison_suffix}"
+    sclora_dir = _safety_mergefix_dir(ckpt_root, safety_gamma, seed)
     if poison_suffix:
         sclora_dir = Path(str(sclora_dir) + poison_suffix)
 
@@ -310,6 +316,21 @@ def main():
                 print(f"| {name} | {asr*100:.1f}% | N/A |")
             else:
                 print(f"| {name} | {asr*100:.1f}% | {acc*100:.1f}% |")
+
+        if args.results_json:
+            import json
+            key_map = {
+                "After alignment (shared)": "after_alignment",
+                "Baseline LoRA": "baseline_lora",
+                "CLoRA (random S)": "clora_random",
+            }
+            out: dict = {"seed": seed}
+            for name, asr, acc in rows:
+                key = key_map.get(name, name.lower().replace(" ", "_").replace("(", "").replace(")", ""))
+                out[key] = {"asr": asr} if acc is None else {"asr": asr, "gsm8k_acc": acc}
+            Path(args.results_json).parent.mkdir(parents=True, exist_ok=True)
+            Path(args.results_json).write_text(json.dumps(out, indent=2))
+            print(f"[shared_stage2] results written to {args.results_json}")
 
 
 if __name__ == "__main__":

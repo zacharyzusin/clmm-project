@@ -1,0 +1,28 @@
+{
+  "seed": 4,
+  "method": "clora_safety",
+  "task_order": [
+    "gsm8k",
+    "sst2"
+  ],
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.011538461538461497,
+      "gsm8k_acc": 0.0356330553449583,
+      "sst2_acc": 0.5114678899082569
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.03269230769230769,
+      "gsm8k_acc": 0.11296436694465505,
+      "sst2_acc": 0.7327981651376146
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 0.0788461538461539,
+      "gsm8k_acc": 0.0712661106899166,
+      "sst2_acc": 0.893348623853211
+    }
+  ]
+}

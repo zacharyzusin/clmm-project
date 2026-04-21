@@ -95,11 +95,13 @@ def _classify_batch(
                 {"role": "user", "content": p},
                 {"role": "assistant", "content": r},
             ]
-            ids = tokenizer.apply_chat_template(
+            chat_str = tokenizer.apply_chat_template(
                 conversation,
-                return_tensors="pt",
+                tokenize=False,
                 add_generation_prompt=True,
             )
+            enc = tokenizer(chat_str, return_tensors="pt")
+            ids = enc["input_ids"]
             input_ids_list.append(ids)
 
         # Process each example independently (avoids padding issues with chat templates).

@@ -1,0 +1,19 @@
+{
+  "seed": 2,
+  "method": "clora_random",
+  "task_order": [
+    "gsm8k"
+  ],
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.011538461538461497,
+      "gsm8k_acc": 0.0356330553449583
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.01538461538461533,
+      "gsm8k_acc": 0.10538286580742987
+    }
+  ]
+}

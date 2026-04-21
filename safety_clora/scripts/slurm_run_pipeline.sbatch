@@ -17,19 +17,19 @@ REPO_ROOT="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_ROOT"
 
 # --- HuggingFace caches ---
-# Prefer per-job scratch (fast, avoids quota) when TMPDIR is a real per-job directory.
-# Fall back to persistent home cache so previously-downloaded models are reused
-# instead of re-downloading to a volatile /tmp that may be cleaned mid-download.
-if [ -n "${TMPDIR:-}" ] && [ "$TMPDIR" != "/tmp" ] && [ -d "$TMPDIR" ]; then
-    export HF_HOME="$TMPDIR/hf"
-else
-    export HF_HOME="${HOME}/.cache/huggingface"
-fi
+# Always use persistent home cache so pre-downloaded models are reused.
+# Using TMPDIR caused re-downloads that hit disk quota on large models.
+export HF_HOME="${HOME}/.cache/huggingface"
 export TRANSFORMERS_CACHE="$HF_HOME/transformers"
 export HF_DATASETS_CACHE="$HF_HOME/datasets"
 export HF_HUB_CACHE="$HF_HOME/hub"
 
 mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
+
+# --- HuggingFace token (for gated models: Llama, Llama-Guard) ---
+if [ -f "${HOME}/.hf_token" ]; then
+    export HF_TOKEN="$(cat "${HOME}/.hf_token")"
+fi
 
 # --- Activate env (installed in persistent scratch) ---
 source "/insomnia001/shared/apps/anaconda/2023.09/etc/profile.d/conda.sh"
@@ -54,6 +54,12 @@ case "$PIPELINE" in
     python -m safety_clora.scripts.run_stage1_alignment_retrain "$@"
     ;;
   stage1_llama)
+    # Llama-3.2-3B-Instruct is ~6GB; redirect to scratch to avoid home quota.
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
     python -m safety_clora.scripts.run_stage1_llama "$@"
     ;;
   shared_stage2_comparison)
@@ -71,9 +77,25 @@ case "$PIPELINE" in
   llama_guard_eval)
     python -m safety_clora.scripts.run_llama_guard_eval "$@"
     ;;
+  llama_stage2_comparison)
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
+    python -m safety_clora.scripts.run_llama_stage2_comparison "$@"
+    ;;
+  llama_sequential)
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
+    python -m safety_clora.scripts.run_llama_sequential "$@"
+    ;;
   *)
     echo "Unknown pipeline: $PIPELINE"
-    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval]"
+    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval|llama_stage2_comparison|llama_sequential]"
     exit 2
     ;;
 esac

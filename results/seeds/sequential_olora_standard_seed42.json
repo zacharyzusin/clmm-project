@@ -1,0 +1,28 @@
+{
+  "seed": 42,
+  "method": "olora_standard",
+  "task_order": [
+    "gsm8k",
+    "sst2"
+  ],
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.011538461538461497,
+      "gsm8k_acc": 0.0356330553449583,
+      "sst2_acc": 0.5114678899082569
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.03269230769230769,
+      "gsm8k_acc": 0.12206216830932524,
+      "sst2_acc": 0.7786697247706422
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 0.16923076923076918,
+      "gsm8k_acc": 0.01592115238817286,
+      "sst2_acc": 0.8715596330275229
+    }
+  ]
+}
