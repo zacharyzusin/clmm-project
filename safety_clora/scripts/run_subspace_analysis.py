@@ -182,12 +182,12 @@ TASK_TAGS  = ["t2_gsm8k", "t3_sst2", "t4_mbpp"]
 
 
 def load_adapters_olora(
-    ckpt_root: Path, method_tag: str
+    ckpt_root: Path, method_tag: str, seq_prefix: str = "seq_"
 ) -> AdapterSet:
     """Load O-LoRA adapters for all three capability stages."""
     adapters = {}
     for task, stage_tag in zip(TASK_NAMES, TASK_TAGS):
-        pt = ckpt_root / f"seq_{method_tag}_seed42_{stage_tag}" / "epoch_3" / "olora_adapters.pt"
+        pt = ckpt_root / f"{seq_prefix}{method_tag}_seed42_{stage_tag}" / "epoch_3" / "olora_adapters.pt"
         if not pt.exists():
             print(f"  [WARN] missing {pt}")
             continue
@@ -196,12 +196,13 @@ def load_adapters_olora(
 
 
 def load_adapters_delta_w(
-    ckpt_root: Path, method_tag: str, base_model_safetensors: Path, rank: int = 8
+    ckpt_root: Path, method_tag: str, base_model_safetensors: Path, rank: int = 8,
+    seq_prefix: str = "seq_",
 ) -> AdapterSet:
     """Load CLoRA/LoRA adapters via ΔW SVD for all three capability stages."""
     adapters = {}
     for task, stage_tag in zip(TASK_NAMES, TASK_TAGS):
-        ckpt_dir = ckpt_root / f"seq_{method_tag}_seed42_{stage_tag}" / "epoch_3"
+        ckpt_dir = ckpt_root / f"{seq_prefix}{method_tag}_seed42_{stage_tag}" / "epoch_3"
         if not ckpt_dir.exists():
             print(f"  [WARN] missing {ckpt_dir}")
             continue
@@ -209,11 +210,11 @@ def load_adapters_delta_w(
     return adapters
 
 
-def load_adapters_peft(ckpt_root: Path, method_tag: str) -> AdapterSet:
+def load_adapters_peft(ckpt_root: Path, method_tag: str, seq_prefix: str = "seq_") -> AdapterSet:
     """Load baseline LoRA adapters (PEFT format) for all three stages."""
     adapters = {}
     for task, stage_tag in zip(TASK_NAMES, TASK_TAGS):
-        ckpt_dir = ckpt_root / f"seq_{method_tag}_seed42_{stage_tag}" / "epoch_3"
+        ckpt_dir = ckpt_root / f"{seq_prefix}{method_tag}_seed42_{stage_tag}" / "epoch_3"
         if not ckpt_dir.exists():
             print(f"  [WARN] missing {ckpt_dir}")
             continue
@@ -323,12 +324,27 @@ def main() -> None:
         default=["olora_standard", "olora_safety", "clora_random", "clora_safety", "lora"],
         help="Methods to include.",
     )
+    ap.add_argument(
+        "--safety-ckpt-dir",
+        type=str,
+        default=None,
+        help="Override path to the Stage-1 safety adapter epoch dir. "
+             "Defaults to <ckpt-root>/qwen_aligned_shared_seed42_.../epoch_3.",
+    )
+    ap.add_argument(
+        "--seq-prefix",
+        type=str,
+        default="seq_",
+        help="Prefix used in sequential checkpoint directory names (default: 'seq_'). "
+             "Use 'seq_llama_3p2_3b_instruct_' for Llama-3.2-3B runs.",
+    )
     args = ap.parse_args()
 
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent
 
     ckpt_root = Path(args.ckpt_root) if args.ckpt_root else repo_root / "checkpoints"
+    seq_prefix = args.seq_prefix
 
     # Locate base model safetensors.
     if args.base_model_cache:
@@ -347,9 +363,13 @@ def main() -> None:
 
     print(f"Base model safetensors: {base_st}")
     print(f"Checkpoint root:        {ckpt_root}")
+    print(f"Seq prefix:             {seq_prefix}")
 
     # Safety adapter (Stage 1 PEFT checkpoint).
-    safety_ckpt = ckpt_root / "qwen_aligned_shared_seed42_saferlhf_chosen_refusal_n1500_ep3" / "epoch_3"
+    if args.safety_ckpt_dir:
+        safety_ckpt = Path(args.safety_ckpt_dir)
+    else:
+        safety_ckpt = ckpt_root / "qwen_aligned_shared_seed42_saferlhf_chosen_refusal_n1500_ep3" / "epoch_3"
     print(f"\nLoading safety adapter from {safety_ckpt} ...")
     safety_adapters = load_safety_adapter(safety_ckpt, rank=args.rank)
     print(f"  Loaded {len(safety_adapters)} layers.")
@@ -359,11 +379,11 @@ def main() -> None:
     for method in args.methods:
         print(f"\nLoading task adapters: {method}")
         if method in ("olora_standard", "olora_safety"):
-            task_adapters = load_adapters_olora(ckpt_root, method)
+            task_adapters = load_adapters_olora(ckpt_root, method, seq_prefix=seq_prefix)
         elif method == "lora":
-            task_adapters = load_adapters_peft(ckpt_root, method)
+            task_adapters = load_adapters_peft(ckpt_root, method, seq_prefix=seq_prefix)
         elif method in ("clora_random", "clora_safety"):
-            task_adapters = load_adapters_delta_w(ckpt_root, method, base_st, rank=args.rank)
+            task_adapters = load_adapters_delta_w(ckpt_root, method, base_st, rank=args.rank, seq_prefix=seq_prefix)
         else:
             print(f"  Unknown method {method}, skipping.")
             continue

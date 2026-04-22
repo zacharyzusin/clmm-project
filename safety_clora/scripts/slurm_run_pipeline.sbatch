@@ -93,9 +93,12 @@ case "$PIPELINE" in
     mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
     python -m safety_clora.scripts.run_llama_sequential "$@"
     ;;
+  subspace_analysis)
+    python -m safety_clora.scripts.run_subspace_analysis "$@"
+    ;;
   *)
     echo "Unknown pipeline: $PIPELINE"
-    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval|llama_stage2_comparison|llama_sequential]"
+    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval|llama_stage2_comparison|llama_sequential|subspace_analysis]"
     exit 2
     ;;
 esac
