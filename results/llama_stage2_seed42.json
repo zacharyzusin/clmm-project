@@ -1,0 +1,29 @@
+{
+  "seed": 42,
+  "model": "meta-llama/Llama-3.2-3B-Instruct",
+  "task": "gsm8k",
+  "slurm_job": 8850714,
+  "after_alignment": {
+    "asr": 0.021153846153846197
+  },
+  "baseline_lora": {
+    "asr": 0.021153846153846197,
+    "gsm8k_acc": 0.29
+  },
+  "clora_random": {
+    "asr": 0.08076923076923077,
+    "gsm8k_acc": 0.246
+  },
+  "safety_clora": {
+    "asr": 0.030769230769230802,
+    "gsm8k_acc": 0.267
+  },
+  "olora": {
+    "asr": 0.09423076923076923,
+    "gsm8k_acc": 0.235
+  },
+  "safety_olora": {
+    "asr": 0.09615384615384616,
+    "gsm8k_acc": 0.23
+  }
+}
