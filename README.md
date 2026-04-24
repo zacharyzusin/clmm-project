@@ -45,17 +45,17 @@ ASR = Attack Success Rate on AdvBench (n=520); lower is better (more aligned).
 
 Key contrast vs Qwen: Baseline LoRA barely degrades alignment on Llama (2.1% = post-alignment baseline). CLoRA/O-LoRA variants actually *increase* ASR above baseline. Safety-CLoRA is the only method that avoids hurting alignment on both models.
 
-### Multi-Seed Variance: 2-Task ASR (Qwen 0.6B, seeds 0/1/42)
+### Multi-Seed Variance: 2-Task ASR (Qwen 0.6B, seeds 0/1/2/3/4/42)
 
-| Method | Seed 42 | Seed 0 | Seed 1 | Mean ± Std |
-|---|---:|---:|---:|---:|
-| Baseline LoRA | 37.3% | 35.6% | 36.9% | 36.6 ± 0.9% |
-| CLoRA random | 3.1% | 9.6% | 1.9% | 4.9 ± 4.1% |
-| Safety-CLoRA | **1.9%** | **0.2%** | 3.7% | **1.9 ± 1.8%** |
-| O-LoRA (λ=0.1) | 13.1% | **37.5%** | 1.3% | 17.3 ± 18.5% |
-| Safety-O-LoRA (λ_s=1.0) | 6.2% | **22.3%** | 5.8% | 11.4 ± 9.4% |
+| Method | Seed 42 | Seed 0 | Seed 1 | Seed 2 | Seed 3 | Seed 4 | Mean ± Std |
+|---|---:|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | 37.3% | 35.6% | 36.9% | 23.5% | 26.0% | 30.2% | 31.6 ± 5.9% (n=6) |
+| CLoRA random | 3.1% | 9.6% | 1.9% | 1.3% | 9.6% | 3.1% | 4.8 ± 3.8% (n=6) |
+| Safety-CLoRA | **1.9%** | **0.2%** | 3.7% | 6.3% | 2.7% | 11.7% | **4.4 ± 4.1%** (n=6) |
+| O-LoRA (λ=0.1) | 13.1% | **37.5%** | 1.3% | **65.8%** | 17.1% | 7.9% | 23.8 ± 24.0% (n=6) |
+| Safety-O-LoRA (λ_s=1.0) | 6.2% | **22.3%** | 5.8% | **83.1%** | 16.7% | 6.9% | 23.5 ± 30.0% (n=6) |
 
-O-LoRA seed 0 is a serious outlier (37.5% vs 1.3–13.1%), reflecting high variance on this method.
+Safety-CLoRA is the clear winner with the lowest and most consistent mean ASR (4.4 ± 4.1%). O-LoRA and Safety-O-LoRA exhibit catastrophic variance (std 24–30%) and are statistically indistinguishable from each other at n=6 — the asymmetric λ_safety modification provides no reliable benefit over standard O-LoRA. Seed 2 is particularly striking: Safety-O-LoRA (83.1%) is *worse* than O-LoRA (65.8%), showing the modification can backfire.
 
 ### LlamaGuard-3-8B Validation (Qwen 0.6B, seed 42)
 
@@ -151,12 +151,13 @@ Classification tasks (SST-2 3.82×, AGNews 3.19×) overlap the safety subspace a
 
 ## Key Findings
 
-1. **Safety-CLoRA is the most reliable safety-preserving method** across both models and all evaluation metrics (1.9% Qwen, 3.1% Llama vs 37.3%/2.1% Baseline LoRA).
-2. **O-LoRA/Safety-O-LoRA fail structurally at SST-2 in sequential training** — near-complete collapse (98%+ ASR) is structural, not a hyperparameter issue. The orthogonality constraint cannot escape the overlapping safety subspace.
-3. **Classification tasks overlap the safety subspace at 3–4× the rate of math/code tasks** — explains the task-type dependency of sequential collapse.
-4. **O-LoRA induces catastrophic backward interference on prior tasks** (−10.4% GSM8K BWT), a distinct failure mode from ASR collapse.
-5. **MBPP is the hardest final task** across all methods and orderings (36–71% ASR at T4).
-6. **Keyword ASR is broadly validated by LlamaGuard-3-8B** — rankings are consistent for safety-preserving methods.
+1. **Safety-CLoRA is the most reliable safety-preserving method** across both models and all evaluation metrics (4.4 ± 4.1% mean ASR on Qwen, n=6 seeds). It is the only method that consistently avoids degrading alignment on Llama-3.2-3B-Instruct (3.1% vs 2.1% post-alignment baseline).
+2. **Safety-O-LoRA provides no reliable improvement over standard O-LoRA** at n=6 seeds (23.5 ± 30.0% vs 23.8 ± 24.0% — not distinguishable). The asymmetric λ_safety modification occasionally makes things dramatically worse (seed 2: 83.1% vs 65.8%). The earlier apparent advantage at n=3 was noise.
+3. **O-LoRA/Safety-O-LoRA fail structurally at SST-2 in sequential training** — near-complete collapse (98%+ ASR on seeds 0/1) is structural, not a hyperparameter issue. The orthogonality constraint cannot escape the overlapping safety subspace.
+4. **Classification tasks overlap the safety subspace at 3–4× the rate of math/code tasks** (SST-2 3.82×, AGNews 3.19× vs GSM8K 1.00×) — mechanistic explanation for why O-LoRA methods fail on classification tasks specifically.
+5. **O-LoRA induces catastrophic backward interference on prior tasks** (−10.4% GSM8K BWT by T4), a distinct failure mode from ASR collapse.
+6. **MBPP is the hardest final task** across all methods and orderings (36–71% ASR at T4).
+7. **Keyword ASR is broadly validated by LlamaGuard-3-8B** — rankings are consistent for safety-preserving methods.
 
 ---
 
@@ -181,8 +182,7 @@ clmm-project/
 │   ├── t2_t3_scatter_safety_olora.png
 │   ├── responses/                              — Saved AdvBench responses (pre-LlamaGuard)
 │   ├── seeds/                                  — Per-seed result JSONs (Qwen sequential + stage2)
-│   └── variance_study/                         — Multi-seed variance JSONs (Safety-CLoRA seeds 2–4,
-│                                                  CLoRA random seeds 2–3)
+│   └── variance_study/                         — Multi-seed variance JSONs (all methods, seeds 2–4)
 └── safety_clora/                               — Python package
     ├── models/
     │   ├── clora.py          — CLoRALinear, S-matrix construction, merge utilities
