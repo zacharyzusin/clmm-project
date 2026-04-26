@@ -182,6 +182,7 @@ def main() -> None:
                     "batch_size": 4,
                     "max_seq_len": 512,
                     "seed": seed,
+                    "use_chat_template": True,
                 }
             ).train(train_dataset=task_train, save_dir=str(baseline_dir))
         else:
@@ -201,6 +202,7 @@ def main() -> None:
                 "batch_size": 4,
                 "max_seq_len": 512,
                 "seed": seed,
+                "use_chat_template": True,
                 "loss_diag_every": args.loss_diag_every,
             }
         ).train(
@@ -224,6 +226,7 @@ def main() -> None:
                 "batch_size": 4,
                 "max_seq_len": 512,
                 "seed": seed,
+                "use_chat_template": True,
                 "loss_diag_every": args.loss_diag_every,
             }
         ).train(

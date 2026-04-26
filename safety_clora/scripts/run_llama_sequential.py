@@ -77,6 +77,7 @@ def _run_stage(*, name, model_init, train_ds, save_dir, args, aligned, bt, cap_a
             model_name=model_init, mode="lora",
             lr=2e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )).train(train_dataset=train_ds, save_dir=str(save_dir))
 
     elif args.method == "clora_random":
@@ -85,6 +86,7 @@ def _run_stage(*, name, model_init, train_ds, save_dir, args, aligned, bt, cap_a
             rank=8, alpha=16, lam=args.lam,
             lr=1e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )).train(train_dataset=train_ds, save_dir=str(save_dir))
 
     elif args.method == "clora_safety":
@@ -95,6 +97,7 @@ def _run_stage(*, name, model_init, train_ds, save_dir, args, aligned, bt, cap_a
             n_safety_prompts=16,
             lr=1e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )).train(
             train_dataset=train_ds,
             aligned_model_name=str(aligned),
@@ -111,6 +114,7 @@ def _run_stage(*, name, model_init, train_ds, save_dir, args, aligned, bt, cap_a
             lam_orth=args.lam_orth, lam_safety=args.lam_safety,
             lr=2e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )).train(
             train_dataset=train_ds,
             aligned_model_name=str(aligned),

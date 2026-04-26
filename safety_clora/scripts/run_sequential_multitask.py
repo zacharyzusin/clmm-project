@@ -103,6 +103,7 @@ def _run_stage(
             model_name=model_init, mode="lora",
             lr=2e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )
         Trainer(cfg).train(train_dataset=train_ds, save_dir=str(save_dir))
 
@@ -112,6 +113,7 @@ def _run_stage(
             rank=8, alpha=16, lam=args.lam,
             lr=1e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )
         Trainer(cfg).train(train_dataset=train_ds, save_dir=str(save_dir))
 
@@ -123,6 +125,7 @@ def _run_stage(
             n_safety_prompts=16,
             lr=1e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )
         Trainer(cfg).train(
             train_dataset=train_ds,
@@ -142,6 +145,7 @@ def _run_stage(
             lam_orth=args.lam_orth, lam_safety=args.lam_safety,
             lr=2e-4, epochs=args.epochs_per_stage,
             batch_size=4, max_seq_len=512, seed=args.seed,
+            use_chat_template=True,
         )
         Trainer(cfg).train(
             train_dataset=train_ds,

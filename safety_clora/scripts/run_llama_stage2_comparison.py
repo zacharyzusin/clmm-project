@@ -141,6 +141,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
+            "use_chat_template": True,
         }).train(train_dataset=task_train, save_dir=str(baseline_dir))
         print(f"[llama_stage2] baseline -> {baseline_dir / f'epoch_{stage2_epochs}'}", flush=True)
 
@@ -157,6 +158,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
+            "use_chat_template": True,
         }).train(train_dataset=task_train, save_dir=str(clora_dir))
         print(f"[llama_stage2] clora_random -> {clora_dir / f'epoch_{stage2_epochs}'}", flush=True)
 
@@ -175,6 +177,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
+            "use_chat_template": True,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
@@ -197,6 +200,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
+            "use_chat_template": True,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
@@ -217,6 +221,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
+            "use_chat_template": True,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
