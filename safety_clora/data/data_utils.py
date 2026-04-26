@@ -179,6 +179,74 @@ def load_mbpp(split: str, n_samples: Optional[int] = None) -> Dataset:
     return ds.map(_map, remove_columns=ds.column_names)
 
 
+def load_superNI_xsum(split: str = 'train', n_samples: int = 1000):
+    """
+    XSum news summarization (EdinburghNLP/xsum).
+    Corresponds to SuperNI task1290. Input: news article. Output: one-sentence summary.
+    Returns list of {input, output} dicts.
+    """
+    # split map: xsum uses train/validation/test
+    _split = split if split in ("train", "validation", "test") else "train"
+    ds = load_dataset("EdinburghNLP/xsum", split=_split)
+    if n_samples:
+        ds = ds.select(range(min(n_samples, len(ds))))
+    formatted = []
+    for item in ds:
+        formatted.append({
+            'input': (
+                "### Instruction:\nSummarize the following news article in one sentence.\n\n"
+                f"{item['document']}\n\n### Response:"
+            ),
+            'output': item['summary'],
+        })
+    return formatted
+
+
+def load_superNI_sciq(split: str = 'train', n_samples: int = 1000):
+    """
+    SciQ answer generation (allenai/sciq).
+    Corresponds to SuperNI task591. Input: science question. Output: short answer.
+    Returns list of {input, output} dicts.
+    """
+    _split = split if split in ("train", "validation", "test") else "train"
+    ds = load_dataset("allenai/sciq", split=_split)
+    if n_samples:
+        ds = ds.select(range(min(n_samples, len(ds))))
+    formatted = []
+    for item in ds:
+        formatted.append({
+            'input': (
+                "### Instruction:\nAnswer the following science question.\n\n"
+                f"{item['question']}\n\n### Response:"
+            ),
+            'output': item['correct_answer'],
+        })
+    return formatted
+
+
+def load_superNI_multiwoz(split: str = 'train', n_samples: int = 1000):
+    """
+    Dialogue summarization (knkarthick/samsum).
+    Corresponds to SuperNI task639 spirit: given dialogue context, generate a response.
+    Input: conversation dialogue. Output: summary / next response.
+    Returns list of {input, output} dicts.
+    """
+    _split = split if split in ("train", "validation", "test") else "train"
+    ds = load_dataset("knkarthick/samsum", split=_split)
+    if n_samples:
+        ds = ds.select(range(min(n_samples, len(ds))))
+    formatted = []
+    for item in ds:
+        formatted.append({
+            'input': (
+                "### Instruction:\nSummarize the following dialogue.\n\n"
+                f"{item['dialogue']}\n\n### Response:"
+            ),
+            'output': item['summary'],
+        })
+    return formatted
+
+
 def load_beavertails_harmful(n_samples: int = 64, split: str = "30k_train") -> List[str]:
     """
     Returns harmful prompts from BeaverTails.

@@ -503,7 +503,13 @@ def load_task_dataset(task_name: str, split: str, n_samples: Optional[int] = Non
     if task_name == "agnews":
         from safety_clora.data.data_utils import load_agnews
         return load_agnews(split=split, n_samples=n_samples)
-    raise ValueError("task_name must be gsm8k, sst2, mbpp, or agnews")
+    if task_name in ("xsum", "sciq", "multiwoz"):
+        from safety_clora.data.data_utils import load_superNI_xsum, load_superNI_sciq, load_superNI_multiwoz
+        from datasets import Dataset as _Dataset
+        loader = {"xsum": load_superNI_xsum, "sciq": load_superNI_sciq, "multiwoz": load_superNI_multiwoz}[task_name]
+        rows = loader(split=split, n_samples=n_samples)
+        return _Dataset.from_list(rows)
+    raise ValueError(f"task_name must be gsm8k, sst2, mbpp, agnews, xsum, sciq, or multiwoz — got {task_name!r}")
 
 
 def load_alignment_dataset(n_samples: int = 500):

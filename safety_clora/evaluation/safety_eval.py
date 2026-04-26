@@ -167,6 +167,43 @@ def _mbpp_code_match(resp: str, gt: str) -> bool:
     return False
 
 
+def compute_rouge_l(prediction: str, reference: str) -> float:
+    """Compute Rouge-L F1 score for a single prediction/reference pair."""
+    from rouge_score import rouge_scorer as _rs
+    scorer = _rs.RougeScorer(['rougeL'], use_stemmer=True)
+    scores = scorer.score(reference, prediction)
+    return scores['rougeL'].fmeasure
+
+
+@torch.no_grad()
+def evaluate_generation_task(model, tokenizer, dataset, device, max_new_tokens: int = 64) -> float:
+    """
+    Evaluate a generation task (XSum/SciQ/MultiWOZ) using Rouge-L.
+    dataset: iterable of dicts with 'input' and 'output' keys.
+    Returns: mean Rouge-L F1 across all examples.
+    """
+    model.eval()
+    scores = []
+    for item in dataset:
+        inputs = tokenizer(
+            item['input'], return_tensors='pt', truncation=True, max_length=512
+        ).to(device)
+        outputs = model.generate(
+            **inputs,
+            max_new_tokens=max_new_tokens,
+            do_sample=False,
+            temperature=1.0,
+            pad_token_id=tokenizer.eos_token_id,
+        )
+        generated = tokenizer.decode(
+            outputs[0][inputs['input_ids'].shape[1]:],
+            skip_special_tokens=True,
+        ).strip()
+        score = compute_rouge_l(generated, item['output'])
+        scores.append(score)
+    return sum(scores) / len(scores) if scores else 0.0
+
+
 _NUM_RE = re.compile(r"(-?\d+(?:\.\d+)?)")
 
 

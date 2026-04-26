@@ -1,0 +1,40 @@
+{
+  "seed": 42,
+  "method": "olora_standard",
+  "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "task_order": [
+    "gsm8k",
+    "sst2",
+    "mbpp"
+  ],
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.02115384615384619,
+      "gsm8k_acc": 0.053828658074298714,
+      "sst2_acc": 0.7465596330275229,
+      "mbpp_acc": 0.02
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.08076923076923082,
+      "gsm8k_acc": 0.2047005307050796,
+      "sst2_acc": 0.8096330275229358,
+      "mbpp_acc": 0.01
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.9197247706422018,
+      "mbpp_acc": 0.0
+    },
+    {
+      "label": "After T4_MBPP",
+      "asr": 0.9673076923076923,
+      "gsm8k_acc": 0.03335860500379075,
+      "sst2_acc": 0.6995412844036697,
+      "mbpp_acc": 0.1
+    }
+  ]
+}

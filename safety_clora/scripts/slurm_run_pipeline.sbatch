@@ -88,9 +88,11 @@ case "$PIPELINE" in
   llama_sequential)
     export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
     export TRANSFORMERS_CACHE="$HF_HOME/transformers"
-    export HF_DATASETS_CACHE="$HF_HOME/datasets"
     export HF_HUB_CACHE="$HF_HOME/hub"
-    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
+    # Datasets use home cache: scratch xsum blobs got corrupted during disk cleanup;
+    # home cache has clean copies downloaded by the Qwen sequential jobs.
+    export HF_DATASETS_CACHE="${HOME}/.cache/huggingface/datasets"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
     python -m safety_clora.scripts.run_llama_sequential "$@"
     ;;
   subspace_analysis)

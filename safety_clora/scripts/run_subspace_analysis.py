@@ -177,8 +177,8 @@ def load_peft_adapters(peft_ckpt_dir: Path) -> Dict[str, torch.Tensor]:
 
 AdapterSet = Dict[str, Dict[str, torch.Tensor]]  # {task_name: {layer_name: A}}
 
-TASK_NAMES = ["gsm8k", "sst2", "mbpp"]
-TASK_TAGS  = ["t2_gsm8k", "t3_sst2", "t4_mbpp"]
+TASK_NAMES = ["gsm8k", "sst2", "mbpp", "xsum", "sciq", "multiwoz"]
+TASK_TAGS  = ["t2_gsm8k", "t3_sst2", "t4_mbpp", "t5_xsum", "t6_sciq", "t7_multiwoz"]
 
 
 def load_adapters_olora(
@@ -278,13 +278,16 @@ def print_summary_table(rows: list[Row]) -> None:
 
     methods = sorted({r[0] for r in rows})
     print("\n=== Mean Subspace Overlap (safety vs task) — averaged over all layers & projections ===")
-    header = f"{'Method':<25} {'GSM8K':>8} {'SST-2':>8} {'MBPP':>8}"
+    col_labels = ["GSM8K", "SST-2", "MBPP", "XSum", "SciQ", "MultiWOZ"]
+    header = f"{'Method':<25}" + "".join(f"{lbl:>10}" for lbl in col_labels)
     print(header)
     print("-" * len(header))
     for m in methods:
-        vals = [f"{sums[(m, t)] / max(1, counts[(m, t)]):.4f}" if counts[(m, t)] else "  N/A  "
-                for t in TASK_NAMES]
-        print(f"{m:<25} {vals[0]:>8} {vals[1]:>8} {vals[2]:>8}")
+        vals = [
+            f"{sums[(m, t)] / max(1, counts[(m, t)]):.4f}" if counts[(m, t)] else "   N/A  "
+            for t in TASK_NAMES
+        ]
+        print(f"{m:<25}" + "".join(f"{v:>10}" for v in vals))
 
     print("\n=== Per-layer overlap: method=* task=sst2 (layers 0-27, q_proj) ===")
     print(f"{'Layer':>6} " + " ".join(f"{m[:15]:>16}" for m in methods))
@@ -346,20 +349,24 @@ def main() -> None:
     ckpt_root = Path(args.ckpt_root) if args.ckpt_root else repo_root / "checkpoints"
     seq_prefix = args.seq_prefix
 
-    # Locate base model safetensors.
-    if args.base_model_cache:
-        base_st = Path(args.base_model_cache) / "model.safetensors"
-    else:
-        # Default: look in the user's HF hub cache.
-        import os
-        hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface" / "hub"))
-        candidates = list(hf_home.glob("models--Qwen--Qwen3-0.6B/snapshots/*/model.safetensors"))
-        if not candidates:
-            raise FileNotFoundError(
-                "Cannot find Qwen3-0.6B model.safetensors in HF cache. "
-                "Pass --base-model-cache <path_to_snapshot_dir>."
-            )
-        base_st = candidates[0]
+    # Locate base model safetensors — only required for delta-W methods (CLoRA, LoRA-merged).
+    delta_w_methods = {"clora_random", "clora_safety"}
+    needs_base_model = any(m in delta_w_methods for m in args.methods)
+
+    base_st: Optional[Path] = None
+    if needs_base_model:
+        if args.base_model_cache:
+            base_st = Path(args.base_model_cache) / "model.safetensors"
+        else:
+            import os
+            hf_home = Path(os.environ.get("HF_HOME", Path.home() / ".cache" / "huggingface" / "hub"))
+            candidates = list(hf_home.glob("models--Qwen--Qwen3-0.6B/snapshots/*/model.safetensors"))
+            if not candidates:
+                raise FileNotFoundError(
+                    "Cannot find Qwen3-0.6B model.safetensors in HF cache. "
+                    "Pass --base-model-cache <path_to_snapshot_dir>."
+                )
+            base_st = candidates[0]
 
     print(f"Base model safetensors: {base_st}")
     print(f"Checkpoint root:        {ckpt_root}")
@@ -383,6 +390,9 @@ def main() -> None:
         elif method == "lora":
             task_adapters = load_adapters_peft(ckpt_root, method, seq_prefix=seq_prefix)
         elif method in ("clora_random", "clora_safety"):
+            if base_st is None:
+                print(f"  Skipping {method}: --base-model-cache required for delta-W analysis.")
+                continue
             task_adapters = load_adapters_delta_w(ckpt_root, method, base_st, rank=args.rank, seq_prefix=seq_prefix)
         else:
             print(f"  Unknown method {method}, skipping.")

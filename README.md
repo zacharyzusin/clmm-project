@@ -13,7 +13,7 @@ Fine-tuning an aligned LLM on benign capability data degrades its safety alignme
 - **O-LoRA** (standard) — orthogonal subspace per task [[arXiv 2310.14152](https://arxiv.org/abs/2310.14152)]
 - **Safety-O-LoRA** (ours) — O-LoRA with asymmetric λ_safety >> λ_cap treating the safety adapter as a permanently privileged task
 
-All methods are evaluated on **Qwen/Qwen3-0.6B** and **meta-llama/Llama-3.2-3B-Instruct** in a two-stage pipeline (alignment SFT → capability fine-tuning) and in a novel **sequential multi-task setting** (T1:align → T2 → T3 → T4).
+All methods are evaluated on **Qwen/Qwen3-0.6B** and **meta-llama/Llama-3.2-3B-Instruct** in a two-stage pipeline (alignment SFT → capability fine-tuning) and in a novel **sequential multi-task setting** (T1:align → T2 → T3 → T4 → T5 → T6 → T7).
 
 ---
 
@@ -72,9 +72,33 @@ Keyword metric is broadly consistent with LlamaGuard (ranking agreement 4/6 on s
 
 ---
 
-### Sequential Multi-Task: gsm8k → sst2 → mbpp
+### Sequential Multi-Task: gsm8k → sst2 → mbpp → xsum → sciq → multiwoz
 
-#### Qwen 0.6B (seed 42)
+#### Qwen 0.6B (seed 42, 6-task chain)
+
+ASR (Attack Success Rate ↓) after each capability stage:
+
+| Method | T2 GSM8K | T3 SST-2 | T4 MBPP | T5 XSum | T6 SciQ | T7 MultiWoz |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | 40.2% | **2.3%** | 17.5% | 9.0% | **94.4%** | 91.0% |
+| CLoRA random | 2.7% | 31.9% | 71.2% | 87.5% | 60.6% | 38.5% |
+| Safety-CLoRA | 1.5% | **87.9%** | 71.0% | 42.7% | 30.4% | **16.3%** |
+| O-LoRA standard | 3.3% | 16.9% | **36.7%** | 15.4% | **87.9%** | 84.0% |
+| Safety-O-LoRA | 4.6% | **81.5%** | 44.8% | 30.6% | 53.5% | 69.6% |
+
+**Safety-CLoRA self-heals over the long chain**: after peaking at 87.9% (T3 SST-2), ASR drops monotonically through T4→T7 (71.0% → 42.7% → 30.4% → **16.3%**) — the only method below 20% after 6 capability tasks. **SciQ is a new catastrophic task** for LoRA (94.4%) and O-LoRA standard (87.9%), mirroring the SST-2 structural failure. **O-LoRA methods permanently lose capability** after T3 SST-2 collapse (GSM8K stays ~1–2% through T7).
+
+Task accuracy at T7 (after all 6 capability fine-tuning stages):
+
+| Method | GSM8K | SST-2 | MBPP | XSum | SciQ | MultiWoz |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | 16.5% | 89.8% | 6.0% | 14.9% | 54.5% | 46.3% |
+| CLoRA random | 10.8% | 83.5% | 1.0% | 15.4% | 41.8% | 44.4% |
+| Safety-CLoRA | 4.0% | 90.9% | 1.0% | 15.7% | 36.2% | 42.6% |
+| O-LoRA standard | 2.0% | 73.7% | 0.0% | 14.5% | 18.9% | 42.8% |
+| Safety-O-LoRA | 3.0% | 81.5% | 2.0% | 15.8% | 26.1% | 42.6% |
+
+#### Qwen 0.6B (seed 42, 3-task chain gsm8k → sst2 → mbpp)
 
 | Method | After T2 GSM8K | After T3 SST-2 | After T4 MBPP |
 |---|---:|---:|---:|
@@ -84,7 +108,7 @@ Keyword metric is broadly consistent with LlamaGuard (ranking agreement 4/6 on s
 | O-LoRA standard | 3.3% | 16.9% | **36.7%** |
 | Safety-O-LoRA | 4.6% | **81.5%** | 44.8% |
 
-#### Llama-3.2-3B-Instruct (seed 42)
+#### Llama-3.2-3B-Instruct (seed 42, 3-task chain gsm8k → sst2 → mbpp)
 
 | Method | After T2 GSM8K | After T3 SST-2 | After T4 MBPP |
 |---|---:|---:|---:|
@@ -152,12 +176,14 @@ Classification tasks (SST-2 3.82×, AGNews 3.19×) overlap the safety subspace a
 ## Key Findings
 
 1. **Safety-CLoRA is the most reliable safety-preserving method** across both models and all evaluation metrics (4.4 ± 4.1% mean ASR on Qwen, n=6 seeds). It is the only method that consistently avoids degrading alignment on Llama-3.2-3B-Instruct (3.1% vs 2.1% post-alignment baseline).
-2. **Safety-O-LoRA provides no reliable improvement over standard O-LoRA** at n=6 seeds (23.5 ± 30.0% vs 23.8 ± 24.0% — not distinguishable). The asymmetric λ_safety modification occasionally makes things dramatically worse (seed 2: 83.1% vs 65.8%). The earlier apparent advantage at n=3 was noise.
-3. **O-LoRA/Safety-O-LoRA fail structurally at SST-2 in sequential training** — near-complete collapse (98%+ ASR on seeds 0/1) is structural, not a hyperparameter issue. The orthogonality constraint cannot escape the overlapping safety subspace.
-4. **Classification tasks overlap the safety subspace at 3–4× the rate of math/code tasks** (SST-2 3.82×, AGNews 3.19× vs GSM8K 1.00×) — mechanistic explanation for why O-LoRA methods fail on classification tasks specifically.
-5. **O-LoRA induces catastrophic backward interference on prior tasks** (−10.4% GSM8K BWT by T4), a distinct failure mode from ASR collapse.
-6. **MBPP is the hardest final task** across all methods and orderings (36–71% ASR at T4).
-7. **Keyword ASR is broadly validated by LlamaGuard-3-8B** — rankings are consistent for safety-preserving methods.
+2. **Safety-CLoRA self-heals over a 6-task chain** — after peaking at 87.9% (T3 SST-2), its ASR drops monotonically to **16.3%** at T7, the only method below 20% after 6 sequential capability fine-tuning stages. The summarization, science QA, and dialogue tasks appear to reinforce the safety-critical subspace.
+3. **Safety-O-LoRA provides no reliable improvement over standard O-LoRA** at n=6 seeds (23.5 ± 30.0% vs 23.8 ± 24.0% — not distinguishable). The asymmetric λ_safety modification occasionally makes things dramatically worse (seed 2: 83.1% vs 65.8%). The earlier apparent advantage at n=3 was noise.
+4. **O-LoRA/Safety-O-LoRA fail structurally at SST-2 in sequential training** — near-complete collapse (98%+ ASR on seeds 0/1) is structural, not a hyperparameter issue. The orthogonality constraint cannot escape the overlapping safety subspace.
+5. **SciQ is a second catastrophic task**, collapsing LoRA to 94.4% and O-LoRA to 87.9% at T6 — same structural failure as SST-2, driven by classification/structured-output tasks overlapping the safety subspace.
+6. **Classification tasks overlap the safety subspace at 3–4× the rate of math/code tasks** (SST-2 3.82×, AGNews 3.19× vs GSM8K 1.00×) — mechanistic explanation for why O-LoRA methods fail on classification tasks specifically.
+7. **O-LoRA induces catastrophic backward interference on prior tasks** (−10.4% GSM8K BWT by T4), a distinct failure mode from ASR collapse. After T3 SST-2 collapse, O-LoRA methods never recover task capability (GSM8K stays ~1–2% through T7).
+8. **MBPP is the hardest 3-task final stage** across all methods and orderings (36–71% ASR at T4).
+9. **Keyword ASR is broadly validated by LlamaGuard-3-8B** — rankings are consistent for safety-preserving methods.
 
 ---
 
@@ -170,19 +196,25 @@ clmm-project/
 ├── configs/
 │   └── default_config.yaml
 ├── results/
-│   ├── subspace_overlap.csv                    — Subspace overlap (840 rows)
-│   ├── llama_guard_results.csv                 — LlamaGuard-3-8B re-evaluation (all methods)
-│   ├── llama_stage2_seed42.json                — Llama-3.2-3B 2-task results (all 5 methods)
-│   ├── llama_sequential_lora_seed42.json       — Llama-3.2-3B sequential LoRA
+│   ├── subspace_overlap.csv                         — Subspace overlap (840 rows, Qwen)
+│   ├── llama_guard_results.csv                      — LlamaGuard-3-8B re-evaluation (all methods)
+│   ├── llama_stage2_seed42.json                     — Llama-3.2-3B 2-task results (all 5 methods)
+│   ├── llama_sequential_lora_seed42.json            — Llama-3.2-3B sequential LoRA (3-task)
 │   ├── llama_sequential_clora_random_seed42.json
 │   ├── llama_sequential_clora_safety_seed42.json
 │   ├── llama_sequential_olora_standard_seed42.json
 │   ├── llama_sequential_olora_safety_seed42.json
-│   ├── t2_t3_scatter_safety_clora.png          — T2-T3 ASR scatter (r=0.16, no correlation)
+│   ├── llama_subspace_regen_olora_standard_seed42.json — Llama O-LoRA retrain for subspace analysis
+│   ├── sequential_6task_qwen_lora_seed42.json        — Qwen 6-task sequential (all 5 methods)
+│   ├── sequential_6task_qwen_clora_random_seed42.json
+│   ├── sequential_6task_qwen_clora_safety_seed42.json
+│   ├── sequential_6task_qwen_olora_standard_seed42.json
+│   ├── sequential_6task_qwen_olora_safety_seed42.json
+│   ├── t2_t3_scatter_safety_clora.png               — T2-T3 ASR scatter (r=0.16, no correlation)
 │   ├── t2_t3_scatter_safety_olora.png
-│   ├── responses/                              — Saved AdvBench responses (pre-LlamaGuard)
-│   ├── seeds/                                  — Per-seed result JSONs (Qwen sequential + stage2)
-│   └── variance_study/                         — Multi-seed variance JSONs (all methods, seeds 2–4)
+│   ├── responses/                                   — Saved AdvBench responses (pre-LlamaGuard)
+│   ├── seeds/                                       — Per-seed result JSONs (Qwen sequential + stage2)
+│   └── variance_study/                              — Multi-seed variance JSONs (all methods, seeds 2–4)
 └── safety_clora/                               — Python package
     ├── models/
     │   ├── clora.py          — CLoRALinear, S-matrix construction, merge utilities

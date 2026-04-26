@@ -18,18 +18,26 @@ from pathlib import Path
 import torch
 
 from safety_clora.data.data_utils import load_advbench_harmful, load_beavertails_harmful, load_agnews
-from safety_clora.evaluation.safety_eval import evaluate_safety, evaluate_task_performance
+from safety_clora.evaluation.safety_eval import (
+    evaluate_safety,
+    evaluate_task_performance,
+    evaluate_generation_task,
+)
 from safety_clora.training.trainer import Trainer, load_task_dataset
 from safety_clora.utils.model_io import load_model_and_tokenizer
 
 _BASE_MODEL_DEFAULT = "meta-llama/Llama-3.2-3B-Instruct"
 
 TASK_REGISTRY = {
-    "gsm8k":  dict(load_split="train", eval_type="gsm8k"),
-    "sst2":   dict(load_split="train", eval_type="sst2"),
-    "mbpp":   dict(load_split="train", eval_type="mbpp"),
-    "agnews": dict(load_split="train", eval_type="agnews"),
+    "gsm8k":    dict(load_split="train", eval_type="gsm8k"),
+    "sst2":     dict(load_split="train", eval_type="sst2"),
+    "mbpp":     dict(load_split="train", eval_type="mbpp"),
+    "agnews":   dict(load_split="train", eval_type="agnews"),
+    "xsum":     dict(load_split="train", eval_type="generation"),
+    "sciq":     dict(load_split="train", eval_type="generation"),
+    "multiwoz": dict(load_split="train", eval_type="generation"),
 }
+GENERATION_TASKS = {"xsum", "sciq", "multiwoz"}
 VALID_TASKS = list(TASK_REGISTRY.keys())
 
 
@@ -41,9 +49,13 @@ def _eval_suite(*, model, tok, harmful_prompts, test_datasets, device):
     asr, _ = evaluate_safety(model, tok, harmful_prompts, device=device)
     results = {"asr": float(asr)}
     for task, ds in test_datasets.items():
-        kw = dict(max_new_tokens=256) if task == "mbpp" else {}
-        r = evaluate_task_performance(model, tok, ds, task_type=task, device=device, **kw)
-        results[f"{task}_acc"] = float(r["accuracy"])
+        if task in GENERATION_TASKS:
+            score = evaluate_generation_task(model, tok, ds, device=device, max_new_tokens=64)
+            results[f"{task}_acc"] = float(score)
+        else:
+            kw = dict(max_new_tokens=256) if task == "mbpp" else {}
+            r = evaluate_task_performance(model, tok, ds, task_type=task, device=device, **kw)
+            results[f"{task}_acc"] = float(r["accuracy"])
     return results
 
 
@@ -131,7 +143,7 @@ def main() -> None:
         "--task-order",
         nargs="+",
         choices=VALID_TASKS,
-        default=["gsm8k", "sst2", "mbpp"],
+        default=["gsm8k", "sst2", "mbpp", "xsum", "sciq", "multiwoz"],
         metavar="TASK",
     )
     ap.add_argument("--seed", type=int, default=42)
@@ -149,6 +161,12 @@ def main() -> None:
     ap.add_argument("--sst2-test-n", type=int, default=None)
     ap.add_argument("--mbpp-test-n", type=int, default=100)
     ap.add_argument("--agnews-test-n", type=int, default=500)
+    ap.add_argument("--xsum-train-n", type=int, default=1000)
+    ap.add_argument("--sciq-train-n", type=int, default=1000)
+    ap.add_argument("--multiwoz-train-n", type=int, default=1000)
+    ap.add_argument("--xsum-test-n", type=int, default=200)
+    ap.add_argument("--sciq-test-n", type=int, default=200)
+    ap.add_argument("--multiwoz-test-n", type=int, default=200)
     ap.add_argument("--advbench-n", type=int, default=None)
     ap.add_argument(
         "--results-json", type=str, default=None,
@@ -174,16 +192,25 @@ def main() -> None:
     adv_n = args.advbench_n if (args.advbench_n is None or args.advbench_n > 0) else None
     harmful = load_advbench_harmful(n_samples=adv_n)
 
-    test_n_map = {"gsm8k": args.gsm8k_test_n, "sst2": args.sst2_test_n,
-                  "mbpp": args.mbpp_test_n, "agnews": args.agnews_test_n}
-    test_split_map = {"gsm8k": "test", "sst2": "validation", "mbpp": "test", "agnews": "test"}
+    test_n_map = {
+        "gsm8k": args.gsm8k_test_n, "sst2": args.sst2_test_n,
+        "mbpp": args.mbpp_test_n, "agnews": args.agnews_test_n,
+        "xsum": args.xsum_test_n, "sciq": args.sciq_test_n, "multiwoz": args.multiwoz_test_n,
+    }
+    test_split_map = {
+        "gsm8k": "test", "sst2": "validation", "mbpp": "test", "agnews": "test",
+        "xsum": "train", "sciq": "train", "multiwoz": "train",
+    }
     test_datasets = {
         t: load_task_dataset(t, split=test_split_map[t], n_samples=test_n_map[t])
         for t in args.task_order
     }
 
-    train_n_map = {"gsm8k": args.gsm8k_train_n, "sst2": args.sst2_train_n,
-                   "mbpp": args.mbpp_train_n, "agnews": args.agnews_train_n}
+    train_n_map = {
+        "gsm8k": args.gsm8k_train_n, "sst2": args.sst2_train_n,
+        "mbpp": args.mbpp_train_n, "agnews": args.agnews_train_n,
+        "xsum": args.xsum_train_n, "sciq": args.sciq_train_n, "multiwoz": args.multiwoz_train_n,
+    }
     train_datasets = {
         t: load_task_dataset(t, split="train", n_samples=train_n_map[t])
         for t in args.task_order
