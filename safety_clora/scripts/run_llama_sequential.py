@@ -13,6 +13,7 @@ Usage (via SLURM dispatcher):
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 
 import torch
@@ -29,13 +30,13 @@ from safety_clora.utils.model_io import load_model_and_tokenizer
 _BASE_MODEL_DEFAULT = "meta-llama/Llama-3.2-3B-Instruct"
 
 TASK_REGISTRY = {
-    "gsm8k":    dict(load_split="train", eval_type="gsm8k"),
-    "sst2":     dict(load_split="train", eval_type="sst2"),
-    "mbpp":     dict(load_split="train", eval_type="mbpp"),
-    "agnews":   dict(load_split="train", eval_type="agnews"),
-    "xsum":     dict(load_split="train", eval_type="generation"),
-    "sciq":     dict(load_split="train", eval_type="generation"),
-    "multiwoz": dict(load_split="train", eval_type="generation"),
+    "gsm8k":    dict(eval_type="gsm8k"),
+    "sst2":     dict(eval_type="sst2"),
+    "mbpp":     dict(eval_type="mbpp"),
+    "agnews":   dict(eval_type="agnews"),
+    "xsum":     dict(eval_type="generation"),
+    "sciq":     dict(eval_type="generation"),
+    "multiwoz": dict(eval_type="generation"),
 }
 GENERATION_TASKS = {"xsum", "sciq", "multiwoz"}
 VALID_TASKS = list(TASK_REGISTRY.keys())
@@ -172,6 +173,10 @@ def main() -> None:
     ap.add_argument("--sciq-test-n", type=int, default=200)
     ap.add_argument("--multiwoz-test-n", type=int, default=200)
     ap.add_argument("--advbench-n", type=int, default=None)
+    ap.add_argument("--cleanup-ckpts", action="store_true",
+                    help="Delete each stage's checkpoint after the next stage trains from it. "
+                         "Keeps peak disk at 1 checkpoint instead of N. "
+                         "If the job fails mid-stage, a restart will re-train from scratch.")
     ap.add_argument(
         "--results-json", type=str, default=None,
         help="If set, write per-stage eval results to this JSON file.",
@@ -203,7 +208,7 @@ def main() -> None:
     }
     test_split_map = {
         "gsm8k": "test", "sst2": "validation", "mbpp": "test", "agnews": "test",
-        "xsum": "train", "sciq": "train", "multiwoz": "train",
+        "xsum": "test", "sciq": "test", "multiwoz": "test",
     }
     test_datasets = {
         t: load_task_dataset(t, split=test_split_map[t], n_samples=test_n_map[t])
@@ -235,6 +240,7 @@ def main() -> None:
 
     rows = [("T1 aligned (before chain)", row0)]
     ep = str(aligned)
+    prev_ckpt_dir = None  # tracks the dir to delete after next stage trains from it
 
     for pos, task in enumerate(args.task_order, start=2):
         stage_name = f"T{pos}_{task.upper()}"
@@ -260,8 +266,19 @@ def main() -> None:
         del m, t
         torch.cuda.empty_cache()
 
+        # Delete previous stage checkpoint — already used for training and eval.
+        if args.cleanup_ckpts and prev_ckpt_dir is not None:
+            shutil.rmtree(str(prev_ckpt_dir), ignore_errors=True)
+            print(f"[llama_seq] cleaned up {prev_ckpt_dir.name}", flush=True)
+
         rows.append((f"After {stage_name}", row))
         ep = str(ep_path)
+        prev_ckpt_dir = ckpt_dir
+
+    # Clean up the final stage checkpoint too.
+    if args.cleanup_ckpts and prev_ckpt_dir is not None:
+        shutil.rmtree(str(prev_ckpt_dir), ignore_errors=True)
+        print(f"[llama_seq] cleaned up {prev_ckpt_dir.name}", flush=True)
 
     header_tasks = " | ".join(t.upper() for t in args.task_order)
     print(f"\n| Stage | ASR (↓) | {header_tasks} |")

@@ -104,9 +104,9 @@ def evaluate_task_performance(
     total = 0
     model.eval()
     for ex in dataset:
-        prompt = ex["input"]
+        prompt = _format_eval_prompt(tokenizer, ex["input"])
         gt = ex["output"]
-        toks = tokenizer(prompt, return_tensors="pt").to(device)
+        toks = tokenizer(prompt, return_tensors="pt", add_special_tokens=False).to(device)
         in_len = toks["input_ids"].shape[1]
         with torch.no_grad():
             out_ids = model.generate(**toks, max_new_tokens=max_new_tokens, do_sample=False)
@@ -178,15 +178,17 @@ def compute_rouge_l(prediction: str, reference: str) -> float:
 @torch.no_grad()
 def evaluate_generation_task(model, tokenizer, dataset, device, max_new_tokens: int = 64) -> float:
     """
-    Evaluate a generation task (XSum/SciQ/MultiWOZ) using Rouge-L.
+    Evaluate a generation task (XSum/SciQ/SAMSum) using Rouge-L.
     dataset: iterable of dicts with 'input' and 'output' keys.
     Returns: mean Rouge-L F1 across all examples.
     """
     model.eval()
     scores = []
     for item in dataset:
+        prompt = _format_eval_prompt(tokenizer, item['input'])
         inputs = tokenizer(
-            item['input'], return_tensors='pt', truncation=True, max_length=512
+            prompt, return_tensors='pt', truncation=True, max_length=512,
+            add_special_tokens=False,
         ).to(device)
         outputs = model.generate(
             **inputs,

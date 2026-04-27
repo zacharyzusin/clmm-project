@@ -1,9 +1,9 @@
 """
-Sequential multitask evaluation: T1 (aligned) → T2 → T3 → T4, re-evaluating
+Sequential multitask evaluation: T1 (aligned) → T2 → T3 → ... → Tn, re-evaluating
 AdvBench + all task benchmarks after each capability stage.
 
-Default task order: gsm8k → sst2 → mbpp
-Reorder with --task-order, e.g. --task-order gsm8k mbpp sst2
+Default task order: gsm8k → sst2 → mbpp → xsum → sciq → multiwoz (6-task chain).
+3-task chain example: --task-order gsm8k sst2 mbpp
 
 Checkpoint naming: seq_{method}_seed{seed}_t{pos}_{task}
   - Default order preserves existing checkpoint names for warm-start / cache hits.
@@ -13,6 +13,7 @@ Checkpoint naming: seq_{method}_seed{seed}_t{pos}_{task}
 from __future__ import annotations
 
 import argparse
+import shutil
 from pathlib import Path
 
 import torch
@@ -32,13 +33,13 @@ from safety_clora.utils.model_io import load_model_and_tokenizer
 # ---------------------------------------------------------------------------
 
 TASK_REGISTRY = {
-    "gsm8k":    dict(load_split="train", eval_type="gsm8k"),
-    "sst2":     dict(load_split="train", eval_type="sst2"),
-    "mbpp":     dict(load_split="train", eval_type="mbpp"),
-    "agnews":   dict(load_split="train", eval_type="agnews"),
-    "xsum":     dict(load_split="train", eval_type="generation"),
-    "sciq":     dict(load_split="train", eval_type="generation"),
-    "multiwoz": dict(load_split="train", eval_type="generation"),
+    "gsm8k":    dict(eval_type="gsm8k"),
+    "sst2":     dict(eval_type="sst2"),
+    "mbpp":     dict(eval_type="mbpp"),
+    "agnews":   dict(eval_type="agnews"),
+    "xsum":     dict(eval_type="generation"),
+    "sciq":     dict(eval_type="generation"),
+    "multiwoz": dict(eval_type="generation"),
 }
 
 # Tasks evaluated with Rouge-L rather than exact-match / accuracy.
@@ -215,6 +216,10 @@ def main() -> None:
     ap.add_argument("--advbench-n", type=int, default=None)
     ap.add_argument("--dry-run", action="store_true",
                     help="Print what would be done without running any training.")
+    ap.add_argument("--cleanup-ckpts", action="store_true",
+                    help="Delete each stage's checkpoint after the next stage trains from it. "
+                         "Keeps peak disk at 1 checkpoint instead of N. "
+                         "If the job fails mid-stage, a restart will re-train from scratch.")
     ap.add_argument(
         "--results-json",
         type=str,
@@ -263,10 +268,9 @@ def main() -> None:
         "mbpp": args.mbpp_test_n, "agnews": args.agnews_test_n,
         "xsum": args.xsum_test_n, "sciq": args.sciq_test_n, "multiwoz": args.multiwoz_test_n,
     }
-    # SuperNI tasks only have a train split; other tasks use canonical test/val splits.
     test_split_map = {
         "gsm8k": "test", "sst2": "validation", "mbpp": "test", "agnews": "test",
-        "xsum": "train", "sciq": "train", "multiwoz": "train",
+        "xsum": "test", "sciq": "test", "multiwoz": "test",
     }
     test_datasets = {
         t: load_task_dataset(t, split=test_split_map[t], n_samples=test_n_map[t])
@@ -300,6 +304,7 @@ def main() -> None:
 
     rows = [("T1 aligned (before chain)", row0)]
     ep = str(aligned)
+    prev_ckpt_dir = None  # tracks the dir to delete after next stage trains from it
 
     for pos, task in enumerate(args.task_order, start=2):
         stage_name = f"T{pos}_{task.upper()}"
@@ -326,8 +331,20 @@ def main() -> None:
         del m, t
         torch.cuda.empty_cache()
 
+        # Delete previous stage checkpoint — it was already used for training this stage
+        # and its eval + olora adapters are already extracted.
+        if args.cleanup_ckpts and prev_ckpt_dir is not None:
+            shutil.rmtree(str(prev_ckpt_dir), ignore_errors=True)
+            print(f"[sequential] cleaned up {prev_ckpt_dir.name}", flush=True)
+
         rows.append((f"After {stage_name}", row))
         ep = str(ep_path)
+        prev_ckpt_dir = ckpt_dir
+
+    # Clean up the final stage checkpoint too.
+    if args.cleanup_ckpts and prev_ckpt_dir is not None:
+        shutil.rmtree(str(prev_ckpt_dir), ignore_errors=True)
+        print(f"[sequential] cleaned up {prev_ckpt_dir.name}", flush=True)
 
     # Print results table.
     header_tasks = " | ".join(t.upper() for t in args.task_order)

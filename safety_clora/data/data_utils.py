@@ -226,9 +226,9 @@ def load_superNI_sciq(split: str = 'train', n_samples: int = 1000):
 
 def load_superNI_multiwoz(split: str = 'train', n_samples: int = 1000):
     """
-    Dialogue summarization (knkarthick/samsum).
-    Corresponds to SuperNI task639 spirit: given dialogue context, generate a response.
-    Input: conversation dialogue. Output: summary / next response.
+    Dialogue summarization (knkarthick/samsum). Called "multiwoz" for registry consistency.
+    Note: this is SAMSum (dialogue summarization), not the MultiWOZ dataset.
+    Input: conversation dialogue. Output: one-sentence summary.
     Returns list of {input, output} dicts.
     """
     _split = split if split in ("train", "validation", "test") else "train"
