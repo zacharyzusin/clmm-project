@@ -62,6 +62,24 @@ case "$PIPELINE" in
     mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_DATASETS_CACHE" "$HF_HUB_CACHE"
     python -m safety_clora.scripts.run_stage1_llama "$@"
     ;;
+  stage1_llama2)
+    # Llama-2-7b-hf base model (~14GB); everything in scratch to avoid home quota.
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    # WildJailbreak uses hf_hub_download; redirect xet staging away from home.
+    export XDG_CACHE_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/xdg_cache"
+    export TMPDIR="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/tmp"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+    export TOKENIZERS_PARALLELISM=false
+    # Count allocated GPUs; fall back to nvidia-smi if SLURM var unset.
+    NUM_GPUS="${SLURM_GPUS_ON_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l)}"
+    NUM_GPUS="${NUM_GPUS:-1}"
+    echo "[sbatch] launching with NUM_GPUS=${NUM_GPUS}"
+    accelerate launch --num_processes "$NUM_GPUS" --mixed_precision bf16 \
+      -m safety_clora.scripts.run_stage1_llama2 "$@"
+    ;;
   shared_stage2_comparison)
     python -m safety_clora.scripts.run_shared_stage2_comparison "$@"
     ;;

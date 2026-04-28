@@ -1,0 +1,13 @@
+{
+  "method": "clora_random",
+  "lam": 0.05,
+  "lam_cap": 0.01,
+  "asr": 0.4,
+  "gsm8k_acc": 0.2539802880970432,
+  "final_ratio": 0.3172688770553878,
+  "final_epoch_mean_task_loss": 0.3547057953476906,
+  "final_epoch_mean_penalty": 0.112537109375,
+  "seed": 42,
+  "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "epochs": 3
+}

@@ -247,6 +247,61 @@ def load_superNI_multiwoz(split: str = 'train', n_samples: int = 1000):
     return formatted
 
 
+def load_wildjailbreak(
+    n_harmful: int = 5000,
+    n_benign: int = 5000,
+    seed: int = 42,
+) -> Dataset:
+    """
+    WildJailbreak alignment dataset (allenai/wildjailbreak).
+
+    TSV schema (confirmed from file):
+      vanilla   — the plain-text prompt
+      adversarial — adversarial jailbreak variant (empty for vanilla rows)
+      completion — model response/completion
+      data_type  — one of: vanilla_harmful, vanilla_benign,
+                            adversarial_harmful, adversarial_benign
+
+    Samples n_harmful rows from vanilla_harmful and n_benign from vanilla_benign.
+    Format: plain text  "Human: {prompt}\\nAssistant: "
+    No chat template — intended for base models.
+
+    Uses hf_hub_download + pandas to bypass datasets library's pyarrow
+    type-inference bug on this TSV (a prompt text was being cast to double).
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    tsv_path = hf_hub_download(
+        repo_id="allenai/wildjailbreak",
+        filename="train/train.tsv",
+        repo_type="dataset",
+    )
+    df = pd.read_csv(tsv_path, sep="\t", dtype=str, keep_default_na=False)
+
+    harmful_df = df[df["data_type"] == "vanilla_harmful"].reset_index(drop=True)
+    benign_df  = df[df["data_type"] == "vanilla_benign"].reset_index(drop=True)
+
+    rng = random.Random(seed)
+    h_idx = list(range(len(harmful_df)))
+    b_idx = list(range(len(benign_df)))
+    rng.shuffle(h_idx)
+    rng.shuffle(b_idx)
+    harmful_df = harmful_df.iloc[h_idx[: min(n_harmful, len(harmful_df))]]
+    benign_df  = benign_df.iloc[b_idx[: min(n_benign,  len(benign_df))]]
+
+    rows = []
+    for df_part in (harmful_df, benign_df):
+        for _, row in df_part.iterrows():
+            prompt     = str(row.get("vanilla", "") or "").strip()
+            completion = str(row.get("completion", "") or "").strip()
+            rows.append({"input": f"Human: {prompt}\nAssistant: ", "output": completion})
+
+    combined = Dataset.from_list(rows)
+    combined = combined.shuffle(seed=seed)
+    return combined
+
+
 def load_beavertails_harmful(n_samples: int = 64, split: str = "30k_train") -> List[str]:
     """
     Returns harmful prompts from BeaverTails.

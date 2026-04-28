@@ -100,7 +100,6 @@ def _pad_collate(batch, pad_id: int):
 
 def _build_loader(tokenizer, ds, batch_size: int, max_seq_len: int):
     tok_ds = _make_lm_dataset(tokenizer, ds, max_seq_len)
-    tok_ds = tok_ds.with_format("torch")
     pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
     return DataLoader(
         tok_ds,
@@ -210,23 +209,18 @@ def task1_clora(device: torch.device):
     print(f"  N_STEPS={N_STEPS}, avg over last {WINDOW} steps")
     print("=" * 60)
 
-    # Load data once.
+    # Load data and tokenizer once.
+    _, tok = _load_aligned_merged(device)
     ds_raw = load_gsm8k("train", n_samples=1000)
-    # Load aligned merged model and tokenizer once; we'll re-initialize CLoRA for each λ.
-    aligned_model, tok = _load_aligned_merged(device)
     loader = _build_loader(tok, ds_raw, BATCH_SIZE, MAX_SEQ_LEN)
-
-    # Clone state dict so we can reset for each λ.
-    import copy
-    base_state = copy.deepcopy(aligned_model.state_dict())
 
     rows = []
     for lam in CLORA_LAMBDAS:
-        print(f"\n[diag] λ={lam} — applying CLoRA random S ...")
-        # Reset base model weights.
-        aligned_model.load_state_dict(base_state)
+        print(f"\n[diag] λ={lam} — loading fresh aligned model and applying CLoRA random S ...")
+        # Reload fresh for each λ: apply_clora_to_model replaces Linear modules with
+        # CLoRALinear, changing the state dict keys, so reset-via-load_state_dict fails.
+        aligned_model, _ = _load_aligned_merged(device)
 
-        # Apply CLoRA random S to the reset model.
         model, _ = apply_clora_to_model(
             aligned_model, rank=8, alpha=16, lam=lam, mode="random"
         )
@@ -246,6 +240,10 @@ def task1_clora(device: torch.device):
         rows.append((lam, l_task, l_reg_raw, l_scaled, ratio))
         print(f"  λ={lam:<8}  L_task={l_task:.4f}  L_reg={l_reg_raw:.4f}  "
               f"λ*L_reg={l_scaled:.4f}  ratio={ratio:.4f}")
+
+        del model, aligned_model, opt
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     print("\n" + "-" * 65)
     print(f"{'λ':<10} {'L_task':>8} {'L_reg':>10} {'λ*L_reg':>10} {'ratio':>8}")

@@ -1,0 +1,13 @@
+{
+  "method": "olora_standard",
+  "lam": 0.01,
+  "lam_cap": 0.01,
+  "asr": 0.3942307692307693,
+  "gsm8k_acc": 0.2168309325246399,
+  "final_ratio": 0.014263504926622959,
+  "final_epoch_mean_task_loss": 0.35640207189321516,
+  "final_epoch_mean_penalty": 0.005083542708307505,
+  "seed": 42,
+  "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "epochs": 3
+}
