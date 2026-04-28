@@ -98,6 +98,14 @@ case "$PIPELINE" in
   subspace_analysis)
     python -m safety_clora.scripts.run_subspace_analysis "$@"
     ;;
+  lambda_sweep)
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="${HOME}/.cache/huggingface/datasets"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
+    python -m safety_clora.scripts.run_llama_lambdasweep "$@"
+    ;;
   lambda_diagnostic)
     export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
     export TRANSFORMERS_CACHE="$HF_HOME/transformers"
