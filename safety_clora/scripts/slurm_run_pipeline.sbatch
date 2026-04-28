@@ -98,9 +98,17 @@ case "$PIPELINE" in
   subspace_analysis)
     python -m safety_clora.scripts.run_subspace_analysis "$@"
     ;;
+  lambda_diagnostic)
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="${HOME}/.cache/huggingface/datasets"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
+    python -m safety_clora.scripts.run_lambda_diagnostic "$@"
+    ;;
   *)
     echo "Unknown pipeline: $PIPELINE"
-    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval|llama_stage2_comparison|llama_sequential|subspace_analysis]"
+    echo "Usage: sbatch slurm_run_pipeline.sbatch [stage1_alignment_retrain|stage1_llama|shared_stage2_comparison|olora_comparison|sequential_multitask|generate_responses|llama_guard_eval|llama_stage2_comparison|llama_sequential|subspace_analysis|lambda_diagnostic]"
     exit 2
     ;;
 esac
