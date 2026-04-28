@@ -1,0 +1,85 @@
+{
+  "seed": 42,
+  "method": "olora_safety",
+  "base_model": "meta-llama/Llama-3.2-3B-Instruct",
+  "task_order": [
+    "gsm8k",
+    "sst2",
+    "mbpp",
+    "xsum",
+    "sciq",
+    "multiwoz"
+  ],
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.019230769230769273,
+      "gsm8k_acc": 0.053828658074298714,
+      "sst2_acc": 0.7465596330275229,
+      "mbpp_acc": 0.02,
+      "xsum_acc": 0.1492909475568833,
+      "sciq_acc": 0.03828029066408276,
+      "multiwoz_acc": 0.2082401801509244
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.23461538461538467,
+      "gsm8k_acc": 0.2312357846853677,
+      "sst2_acc": 0.7408256880733946,
+      "mbpp_acc": 0.02,
+      "xsum_acc": 0.12734181767681718,
+      "sciq_acc": 0.038574513705790875,
+      "multiwoz_acc": 0.11948797194544071
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 1.0,
+      "gsm8k_acc": 0.002274450341167551,
+      "sst2_acc": 0.7935779816513762,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.03164205073988426,
+      "sciq_acc": 0.0018840046958691022,
+      "multiwoz_acc": 0.008083246465665824
+    },
+    {
+      "label": "After T4_MBPP",
+      "asr": 0.9653846153846154,
+      "gsm8k_acc": 0.030326004548900682,
+      "sst2_acc": 0.8589449541284404,
+      "mbpp_acc": 0.08,
+      "xsum_acc": 0.0913794100837184,
+      "sciq_acc": 0.016824283062599987,
+      "multiwoz_acc": 0.08443841210242892
+    },
+    {
+      "label": "After T5_XSUM",
+      "asr": 0.8192307692307692,
+      "gsm8k_acc": 0.024260803639120546,
+      "sst2_acc": 0.6743119266055045,
+      "mbpp_acc": 0.02,
+      "xsum_acc": 0.16261111639602455,
+      "sciq_acc": 0.02530926159150352,
+      "multiwoz_acc": 0.10252008102746368
+    },
+    {
+      "label": "After T6_SCIQ",
+      "asr": 1.0,
+      "gsm8k_acc": 0.022744503411675512,
+      "sst2_acc": 0.7236238532110092,
+      "mbpp_acc": 0.07,
+      "xsum_acc": 0.0762501426573042,
+      "sciq_acc": 0.049636760910568754,
+      "multiwoz_acc": 0.07070801741798122
+    },
+    {
+      "label": "After T7_MULTIWOZ",
+      "asr": 0.7634615384615384,
+      "gsm8k_acc": 0.029567854435178165,
+      "sst2_acc": 0.36926605504587157,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.11457587482449293,
+      "sciq_acc": 0.02643912646399559,
+      "multiwoz_acc": 0.15464516104300619
+    }
+  ]
+}
