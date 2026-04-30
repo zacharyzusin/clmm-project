@@ -73,6 +73,15 @@ case "$PIPELINE" in
     export TMPDIR="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/tmp"
     mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
     export TOKENIZERS_PARALLELISM=false
+    # Never contact HF Hub during loading — model/tokenizer/dataset are already cached in
+    # scratch. Without this, huggingface_hub makes a background network check on every
+    # from_pretrained / hf_hub_download call; if that hangs on any rank, the NCCL barrier
+    # deadlocks indefinitely (jobs 9019105 / 9038425 / 9050392 all died this way).
+    # HF_HUB_OFFLINE=1 is the key flag — it governs hf_hub_download (used by WildJailbreak
+    # loader); TRANSFORMERS_OFFLINE and HF_DATASETS_OFFLINE do NOT cover it.
+    export HF_HUB_OFFLINE=1
+    export TRANSFORMERS_OFFLINE=1
+    export HF_DATASETS_OFFLINE=1
     # Count allocated GPUs; fall back to nvidia-smi if SLURM var unset.
     NUM_GPUS="${SLURM_GPUS_ON_NODE:-$(nvidia-smi -L 2>/dev/null | wc -l)}"
     NUM_GPUS="${NUM_GPUS:-1}"
@@ -131,6 +140,16 @@ case "$PIPELINE" in
     export HF_DATASETS_CACHE="${HOME}/.cache/huggingface/datasets"
     mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
     python -m safety_clora.scripts.run_lambda_diagnostic "$@"
+    ;;
+  lambda_diagnostic_llama2)
+    # Llama-2-7b-hf is cached in scratch; HF_HUB_OFFLINE avoids any network calls.
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="$HF_HOME/datasets"
+    export HF_HUB_OFFLINE=1
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
+    python -m safety_clora.scripts.run_lambda_diagnostic_llama2 "$@"
     ;;
   *)
     echo "Unknown pipeline: $PIPELINE"

@@ -72,6 +72,8 @@ def main() -> None:
         default="all",
         choices=["all", "baseline", "clora", "safety", "olora", "safety_olora", "eval_only"],
     )
+    ap.add_argument("--no-chat-template", action="store_true",
+                    help="Disable chat template in training (for base models like Llama-2-7b-hf).")
     ap.add_argument("--skip-alignment-eval", action="store_true")
     ap.add_argument(
         "--results-json",
@@ -95,6 +97,7 @@ def main() -> None:
     tag = _ckpt_tag(base_model)
     run_stage = args.stage
     safety_gamma = float(args.safety_gamma)
+    use_chat_template = not args.no_chat_template
 
     adv_n = args.advbench_n if (args.advbench_n is not None and args.advbench_n > 0) else None
     gsm_test_n = args.gsm8k_test_n if (args.gsm8k_test_n is not None and args.gsm8k_test_n > 0) else None
@@ -141,7 +144,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
-            "use_chat_template": True,
+            "use_chat_template": use_chat_template,
         }).train(train_dataset=task_train, save_dir=str(baseline_dir))
         print(f"[llama_stage2] baseline -> {baseline_dir / f'epoch_{stage2_epochs}'}", flush=True)
 
@@ -158,7 +161,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
-            "use_chat_template": True,
+            "use_chat_template": use_chat_template,
         }).train(train_dataset=task_train, save_dir=str(clora_dir))
         print(f"[llama_stage2] clora_random -> {clora_dir / f'epoch_{stage2_epochs}'}", flush=True)
 
@@ -177,7 +180,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
-            "use_chat_template": True,
+            "use_chat_template": use_chat_template,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
@@ -200,7 +203,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
-            "use_chat_template": True,
+            "use_chat_template": use_chat_template,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
@@ -221,7 +224,7 @@ def main() -> None:
             "batch_size": 4,
             "max_seq_len": 512,
             "seed": seed,
-            "use_chat_template": True,
+            "use_chat_template": use_chat_template,
         }).train(
             train_dataset=task_train,
             aligned_model_name=str(aligned_epoch),
@@ -230,7 +233,7 @@ def main() -> None:
         print(f"[llama_stage2] safety_olora -> {safety_olora_dir / f'epoch_{stage2_epochs}'}", flush=True)
 
     # --- Evaluation ---
-    if run_stage in {"all", "eval_only"}:
+    if run_stage in {"all", "eval_only", "baseline"}:
         if asr_align is None:
             asr_align = _alignment_asr()
 

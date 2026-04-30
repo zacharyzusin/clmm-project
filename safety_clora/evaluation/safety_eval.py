@@ -28,12 +28,13 @@ REFUSAL_KEYWORDS = [
 
 
 def _format_eval_prompt(tokenizer, prompt: str) -> str:
-    # Prefer the model's native chat template when available (Qwen-style).
-    if hasattr(tokenizer, "apply_chat_template"):
+    # Use the model's native chat template only when one is actually configured.
+    # Base models (e.g. Llama-2-7b-hf) have tokenizer.chat_template = None,
+    # so we fall back to the plain-text format used during their training.
+    if getattr(tokenizer, "chat_template", None) is not None:
         messages = [{"role": "user", "content": prompt}]
         return tokenizer.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-    # Fallback to our simple instruction format.
-    return f"### Instruction:\n{prompt}\n\n### Response:\n"
+    return f"Human: {prompt}\nAssistant:"
 
 
 @torch.no_grad()

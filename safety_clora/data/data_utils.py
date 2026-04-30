@@ -276,6 +276,7 @@ def load_wildjailbreak(
         repo_id="allenai/wildjailbreak",
         filename="train/train.tsv",
         repo_type="dataset",
+        local_files_only=True,
     )
     df = pd.read_csv(tsv_path, sep="\t", dtype=str, keep_default_na=False)
 

@@ -27,7 +27,8 @@ from pathlib import Path
 from typing import Sequence
 
 import torch
-from accelerate import Accelerator
+from accelerate import Accelerator, InitProcessGroupKwargs
+from datetime import timedelta
 from peft import LoraConfig, get_peft_model
 from torch.optim import AdamW
 from torch.optim.lr_scheduler import LambdaLR
@@ -105,7 +106,9 @@ def main() -> None:
     parser.add_argument("--eval-advbench-n", type=int, default=None)
     args = parser.parse_args()
 
-    accelerator = Accelerator()
+    accelerator = Accelerator(
+        kwargs_handlers=[InitProcessGroupKwargs(timeout=timedelta(seconds=7200))],
+    )
     _set_seed(args.seed + accelerator.process_index)  # different seed per rank for data diversity
 
     script_pkg = Path(__file__).resolve().parents[1]
@@ -120,17 +123,38 @@ def main() -> None:
         print(f"[Stage-1 Llama-2] example[0] input:  {train_ds[0]['input'][:200]}", flush=True)
         print(f"[Stage-1 Llama-2] example[0] output: {train_ds[0]['output'][:200]}", flush=True)
 
-    # --- Load tokenizer and model on rank 0 first so weights are cached,
-    #     then all other ranks load from the local cache.               ---
-    if accelerator.is_main_process:
-        print(f"[Stage-1 Llama-2] loading {args.model_id}", flush=True)
-    with accelerator.main_process_first():
-        tokenizer = AutoTokenizer.from_pretrained(args.model_id, use_fast=True)
-        if tokenizer.pad_token_id is None:
-            tokenizer.pad_token_id = tokenizer.eos_token_id
-        tokenizer.padding_side = "right"
+    # --- Load tokenizer (all ranks in parallel — tiny memory footprint) ---
+    # local_files_only=True: prevent any HF Hub network check that can hang on
+    # some cluster nodes and deadlock the subsequent NCCL barrier.
+    tokenizer = AutoTokenizer.from_pretrained(args.model_id, use_fast=True, local_files_only=True)
+    if tokenizer.pad_token_id is None:
+        tokenizer.pad_token_id = tokenizer.eos_token_id
+    tokenizer.padding_side = "right"
 
-        model = AutoModelForCausalLM.from_pretrained(args.model_id, torch_dtype=torch.bfloat16, device_map=None)
+    # --- Load model one rank at a time and immediately move to GPU.
+    #
+    # WHY: loading all 4 copies of Llama-2-7B (13.4 GB each) into CPU RAM
+    # simultaneously exhausts the 80 GB system-RAM limit. Previous run
+    # (job 9018180) OOM-killed all 4 ranks at this step.
+    # Sequential loading keeps peak CPU RAM at ~13.4 GB (one rank at a time).
+    # Each rank moves its copy to GPU before the next rank starts loading.
+    # ---
+    if accelerator.is_main_process:
+        print(f"[Stage-1 Llama-2] loading {args.model_id} (sequential per rank to avoid CPU RAM OOM)", flush=True)
+    model = None
+    for _rank_idx in range(accelerator.num_processes):
+        if accelerator.local_process_index == _rank_idx:
+            print(f"[Stage-1 Llama-2] rank {_rank_idx} loading model...", flush=True)
+            model = AutoModelForCausalLM.from_pretrained(
+                args.model_id,
+                torch_dtype=torch.bfloat16,
+                device_map=None,
+                local_files_only=True,
+            )
+            # Move to GPU immediately so CPU RAM is freed before the next rank loads.
+            model = model.to(accelerator.device)
+            print(f"[Stage-1 Llama-2] rank {_rank_idx} model on {accelerator.device}", flush=True)
+        accelerator.wait_for_everyone()
     model.gradient_checkpointing_enable()
 
     # --- Apply LoRA ---
