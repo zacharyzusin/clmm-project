@@ -111,8 +111,8 @@ def main() -> None:
 
     # Checkpoint directories (parallel naming to Qwen runs, using model tag).
     baseline_dir = ckpt_root / f"{tag}_lora_gsm8k_seed{seed}"
-    clora_dir = ckpt_root / f"{tag}_clora_gsm8k_seed{seed}"
-    safety_clora_dir = ckpt_root / f"{tag}_safety_clora_gsm8k_seed{seed}_kl0"
+    clora_dir = ckpt_root / f"{tag}_clora_gsm8k_seed{seed}_lam{args.lam_clora:g}"
+    safety_clora_dir = ckpt_root / f"{tag}_safety_clora_gsm8k_seed{seed}_kl0_lam{args.lam_clora:g}"
     olora_dir = ckpt_root / f"{tag}_olora_gsm8k_seed{seed}_lam{args.lam_orth:g}"
     safety_olora_dir = ckpt_root / f"{tag}_safety_olora_gsm8k_seed{seed}_lams{args.lam_safety:g}"
 

@@ -21,6 +21,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import gc
 from pathlib import Path
 
 import torch
@@ -49,8 +50,8 @@ ALIGNED_CKPT = (
 # ---------------------------------------------------------------------------
 
 N_STEPS = 50
-BATCH_SIZE = 4
-MAX_SEQ_LEN = 512
+BATCH_SIZE = 1
+MAX_SEQ_LEN = 128
 LR = 1e-4
 SEED = 42
 WINDOW = 25  # average over last WINDOW steps to skip warmup
@@ -77,7 +78,9 @@ def _load_tokenizer() -> AutoTokenizer:
 
 def _load_aligned_merged(base_model_id: str, device: torch.device):
     """Load Stage-1 PEFT checkpoint and merge adapters into base weights."""
-    base = AutoModelForCausalLM.from_pretrained(base_model_id).to(device)
+    base = AutoModelForCausalLM.from_pretrained(
+        base_model_id, torch_dtype=torch.bfloat16
+    ).to(device)
     peft_model = PeftModel.from_pretrained(
         base, str(ALIGNED_CKPT / "adapter"), is_trainable=False
     )
@@ -85,7 +88,9 @@ def _load_aligned_merged(base_model_id: str, device: torch.device):
 
 
 def _load_base(base_model_id: str, device: torch.device):
-    return AutoModelForCausalLM.from_pretrained(base_model_id).to(device)
+    return AutoModelForCausalLM.from_pretrained(
+        base_model_id, torch_dtype=torch.bfloat16
+    ).to(device)
 
 
 def _build_loader(tokenizer, ds_raw, batch_size: int, max_seq_len: int) -> DataLoader:
@@ -122,6 +127,33 @@ def _run_steps(model, loader, opt, device, *, collect_reg_fn=None, n_steps: int)
         out.loss.backward()
         opt.step()
         records.append(row)
+    return records
+
+
+def _run_steps_no_grad(model, loader, device, *, collect_reg_fn=None, n_steps: int):
+    """Forward-only variant: no optimizer, no backward — for memory-constrained diagnostics."""
+    model.eval()
+    it = iter(loader)
+    records = []
+    with torch.inference_mode():
+        for _ in range(n_steps):
+            try:
+                batch = next(it)
+            except StopIteration:
+                it = iter(loader)
+                batch = next(it)
+            batch = {k: v.to(device) for k, v in batch.items()}
+            out = model(
+                input_ids=batch["input_ids"],
+                attention_mask=batch["attention_mask"],
+                labels=batch["labels"],
+            )
+            row = {"l_task": out.loss.item()}
+            if collect_reg_fn is not None:
+                reg_raw, extras = collect_reg_fn(model)
+                row["l_reg_raw"] = float(reg_raw.item() if torch.is_tensor(reg_raw) else reg_raw)
+                row.update({k: float(v.item() if torch.is_tensor(v) else v) for k, v in extras.items()})
+            records.append(row)
     return records
 
 
@@ -244,13 +276,12 @@ def task2_olora(device: torch.device, n_steps: int):
             base_model, rank=8, alpha=16,
             prev_adapters_by_name=prev_adapters_by_name,
         )
-        opt = torch.optim.AdamW([p for p in model.parameters() if p.requires_grad], lr=LR)
 
         def _reg_fn(m, _ls=lam_safety):
             raw = _raw_orth_loss_for_model(m)
             return _ls * raw, {"l_orth_raw": raw}
 
-        records = _run_steps(model, loader, opt, device, collect_reg_fn=_reg_fn, n_steps=n_steps)
+        records = _run_steps_no_grad(model, loader, device, collect_reg_fn=_reg_fn, n_steps=n_steps)
         w = min(WINDOW, n_steps)
         l_task = _window_avg(records, "l_task", w)
         l_orth_raw = _window_avg(records, "l_orth_raw", w)
@@ -260,7 +291,7 @@ def task2_olora(device: torch.device, n_steps: int):
         print(f"  λ_s={lam_safety:<6} L_task={l_task:.4f}  L_orth_raw={l_orth_raw:.4f}  "
               f"λ_s*L_orth={l_scaled:.4f}  ratio={ratio:.4f}")
 
-        del base_model, model, opt
+        del base_model, model
         if torch.cuda.is_available():
             torch.cuda.empty_cache()
 
@@ -314,6 +345,9 @@ def main():
 
     if args.task in ("1", "all"):
         task1_clora(device, n_steps)
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
 
     if args.task in ("2", "all"):
         task2_olora(device, n_steps)

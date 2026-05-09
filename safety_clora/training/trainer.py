@@ -307,12 +307,16 @@ class Trainer:
             if mode == "clora_safety":
                 if aligned_model_name is None or base_model_name_for_s is None:
                     raise ValueError("clora_safety requires aligned_model_name and base_model_name_for_s")
-                aligned_model, _tok2 = load_model_and_tokenizer(aligned_model_name, device=self.device, trainable=False)
+                # Load reference models on CPU: build_safety_s_matrices moves
+                # individual layer tensors to GPU one at a time for SVD, so we never
+                # need all three 7B models resident on GPU simultaneously.
+                _cpu = torch.device("cpu")
+                aligned_model, _tok2 = load_model_and_tokenizer(aligned_model_name, device=_cpu, trainable=False)
                 aligned_model = _maybe_merge_peft(aligned_model)
                 aligned_model.eval()
                 for p in aligned_model.parameters():
                     p.requires_grad_(False)
-                base_model = AutoModelForCausalLM.from_pretrained(base_model_name_for_s, torch_dtype=torch.float32).to(self.device)
+                base_model = AutoModelForCausalLM.from_pretrained(base_model_name_for_s, torch_dtype=torch.bfloat16)
                 base_model.eval()
                 for p in base_model.parameters():
                     p.requires_grad_(False)

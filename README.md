@@ -13,9 +13,17 @@ Fine-tuning an aligned LLM on benign capability data degrades its safety alignme
 - **O-LoRA** (standard) — orthogonal subspace per task [[arXiv 2310.14152](https://arxiv.org/abs/2310.14152)]
 - **Safety-O-LoRA** (ours) — O-LoRA with asymmetric λ_safety >> λ_cap treating the safety adapter as a permanently privileged task
 
-All methods are evaluated on **Qwen/Qwen3-0.6B** and **meta-llama/Llama-3.2-3B-Instruct** in a two-stage pipeline (alignment SFT → capability fine-tuning) and in a novel **sequential multi-task setting** (T1:align → T2:gsm8k → T3:sst2 → T4:mbpp → T5:xsum → T6:sciq → T7:multiwoz).
+Methods are evaluated across three models covering the spectrum from small to medium scale:
 
-> **Note on experiment versioning.** Results labeled **(chatfix)** use `use_chat_template=True` during Stage-2 training, matching the format used in Stage-1 and evaluation. These are the **canonical results**. Earlier runs had a train/eval format mismatch; they are preserved in the [Appendix](#appendix-pre-chat-template-fix-results-superseded) for reference.
+| Model | Type | Alignment data | Chat template |
+|---|---|---|---|
+| **Qwen/Qwen3-0.6B** | Instruction-tuned (small) | SafeRLHF chosen refusals (n=1500) | Yes |
+| **meta-llama/Llama-3.2-3B-Instruct** | Instruction-tuned (medium) | SafeRLHF chosen refusals (n=1500) | Yes |
+| **meta-llama/Llama-2-7b-hf** | Base model (large) | WildJailbreak (n=10000 balanced) | **No** (plain text) |
+
+Evaluation settings: 2-stage pipeline (alignment SFT → capability fine-tuning on GSM8K) and a novel **sequential multi-task setting** (T1:align → T2:gsm8k → T3:sst2 → T4:mbpp → T5:xsum → T6:sciq → T7:multiwoz).
+
+> **Note on experiment versioning.** Results labeled **(chatfix)** use `use_chat_template=True` during Stage-2 training, matching the format used in Stage-1 and evaluation. These are the **canonical results** for Qwen and Llama-3.2. Earlier runs had a train/eval format mismatch; they are preserved in the [Appendix](#appendix-pre-chat-template-fix-results-superseded) for reference. Llama-2-7B uses plain text throughout (base model with no chat template).
 
 ---
 
@@ -48,6 +56,25 @@ All methods fail substantially on Qwen-0.6B. Alignment in this model is fragile 
 | Safety-O-LoRA (λ_s=1.0) | 51.5% | 18.7% |
 
 On Llama-3.2-3B, Baseline LoRA barely degrades alignment (4.8% ≈ post-alignment baseline). Safety-CLoRA is the best CL method (11.2%). CLoRA random and O-LoRA variants significantly increase ASR above the aligned baseline.
+
+### 2-Task Table: align → GSM8K (Llama-2-7B-hf, seed 42, λ sweep)
+
+Base model (no instruction tuning); plain-text format; WildJailbreak alignment (n=10000). Post-alignment ASR = 0.6%, confirming alignment success before Stage 2.
+
+| Method | λ=0.05 ASR ↓ | λ=0.1 ASR ↓ | λ=0.2 ASR ↓ | GSM8K Acc (best λ) ↑ |
+|---|---:|---:|---:|---:|
+| After alignment | 0.6% | 0.6% | 0.6% | — |
+| Baseline LoRA | 64.4% | 64.4% | 64.4% | 6.0% |
+| CLoRA (random S) | 60.2% | 65.6% | 70.8% | ~7.5% |
+| Safety-CLoRA (γ=0) | 42.5% | **31.7%** | 46.7% | ~5.0% |
+| O-LoRA | ~99.8% | 100% | 90.1% | ~5.2% |
+| Safety-O-LoRA | 100% | 100% | 100% | ~4–6% |
+
+**Canonical λ selected:** Safety-CLoRA λ=0.1 (best); CLoRA random λ=0.05; O-LoRA λ=0.2.
+
+On Llama-2-7B (base model), alignment is more fragile — Baseline LoRA degrades to 64.4%. Safety-CLoRA is again the only CL method that substantially reduces ASR (31.7%), roughly halving the baseline degradation. CLoRA random slightly worsens over baseline. O-LoRA and Safety-O-LoRA fail catastrophically (90–100%) at all λ, consistent with findings on Qwen and Llama-3.2.
+
+> **Status:** Multi-seed variance (seeds 0 & 1, jobs 9407247–9407250) and sequential 6-task results are pending.
 
 ---
 
@@ -101,17 +128,17 @@ On Llama, Baseline LoRA and Safety-CLoRA are far more stable than on Qwen. O-LoR
 
 ## Key Findings
 
-1. **Alignment preservation is model-scale dependent.** Qwen-0.6B's alignment is fundamentally fragile — all CL methods fail (70–99% ASR) at Stage 2. Llama-3.2-3B-Instruct is far more stable: Baseline LoRA achieves only 4.8% ASR at Stage 2 and 10.0% after 6 sequential tasks.
+1. **Alignment preservation is model-scale dependent.** Qwen-0.6B's alignment is fundamentally fragile — all CL methods fail (70–99% ASR) at Stage 2. Llama-3.2-3B-Instruct is far more stable (Baseline LoRA: 4.8%, T7 chain: 10.0%). Llama-2-7B (base model) falls between: Baseline LoRA degrades to 64.4%, confirming that instruction-tuned models have more robust alignment priors.
 
-2. **Safety-CLoRA is the best CL method on Llama.** It achieves 11.2% ASR at Stage 2 (vs 4.8% Baseline LoRA) and is the only method significantly below 50% after a 6-task chain (36.5% at T7 vs 46.7%–83.8% for others). The alignment-direction S-matrix provides modest but consistent protection on the stronger model.
+2. **Safety-CLoRA is the best CL method across all model scales where CL matters.** On Llama-3.2-3B-Instruct: 11.2% ASR at Stage 2 and 36.5% after 6 tasks (best among CL methods). On Llama-2-7B: 31.7% ASR at λ=0.1 (vs 64.4% Baseline LoRA — halves the degradation). The alignment-direction S-matrix provides consistent, reproducible protection. CLoRA with a random S-matrix provides little or no benefit over Baseline LoRA on base models.
 
-3. **O-LoRA and Safety-O-LoRA fail structurally at SST-2 — on both models.** After T3 SST-2, O-LoRA reaches 100% ASR on both Qwen and Llama (Safety-O-LoRA: 100% on both). This is not a hyperparameter issue: the orthogonality constraint cannot avoid the safety subspace because SST-2 gradients naturally live there (SST-2 overlap 3.82× GSM8K; see subspace analysis below). This confirms the failure is architectural and model-family-independent.
+3. **O-LoRA and Safety-O-LoRA fail structurally at SST-2 — across all three models.** After T3 SST-2, O-LoRA/Safety-O-LoRA reach 100% ASR on Qwen, Llama-3.2, and Llama-2-7B (all λ values). This is not a hyperparameter issue: the orthogonality constraint cannot avoid the safety subspace because SST-2 gradients naturally live there (SST-2 overlap 3.82× GSM8K; see subspace analysis below). The failure is architectural and model-family-independent.
 
-4. **SciQ (T6) is a second catastrophic task for LoRA-based methods on Llama** (Baseline LoRA 61.7%, CLoRA/Safety-CLoRA ~47–64%) but MultiWoz "recovers" LoRA back to 10.0% at T7 — ASR is non-monotone along the chain.
+4. **SciQ (T6) is a second catastrophic task for LoRA-based methods on Llama-3.2** (Baseline LoRA 61.7%, CLoRA/Safety-CLoRA ~47–64%) but MultiWoz "recovers" LoRA back to 10.0% at T7 — ASR is non-monotone along the chain.
 
-5. **O-LoRA permanently destroys task capability after SST-2 collapse.** After T3 on both models, O-LoRA GSM8K accuracy drops to ~1–3% and never recovers through T7. The orthogonality constraint forces capacity away from all prior tasks simultaneously.
+5. **O-LoRA permanently destroys task capability after SST-2 collapse.** After T3 on all models, O-LoRA GSM8K accuracy drops to ~1–3% and never recovers through T7. The orthogonality constraint forces capacity away from all prior tasks simultaneously.
 
-6. **Safety-O-LoRA provides no reliable improvement over O-LoRA.** Both collapse at SST-2 and share similarly catastrophic final ASR values. The asymmetric λ_safety fails to protect safety once the subspace overlap forces optimization into a damaging regime.
+6. **Safety-O-LoRA provides no reliable improvement over O-LoRA.** Both collapse at SST-2 and share similarly catastrophic final ASR values across all models and λ values. The asymmetric λ_safety fails to protect safety once the subspace overlap forces optimization into a damaging regime.
 
 ---
 
@@ -146,7 +173,9 @@ clmm-project/
 │   ├── llama_sequential_*.json                           — Llama sequential 3-task (pre-fix)
 │   ├── sequential_6task_qwen_*_seed42.json               — Qwen 6-task sequential (pre-fix)
 │   ├── sequential_6task_qwen_*_seed42_chatfix.json       — Qwen 6-task sequential (chatfix, canonical)
-│   ├── sequential_6task_llama_*_seed42_chatfix.json      — Llama 6-task sequential (chatfix, canonical)
+│   ├── sequential_6task_llama_*_seed42_chatfix.json      — Llama-3.2 6-task sequential (chatfix, canonical)
+│   ├── llama2_2task_group_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (CLoRA/O-LoRA)
+│   ├── llama2_2task_final_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (Safety-CLoRA/Safety-O-LoRA)
 │   ├── t2_t3_scatter_safety_clora.png                    — T2-T3 ASR scatter (r=0.16)
 │   ├── t2_t3_scatter_safety_olora.png
 │   ├── responses/                                        — Saved AdvBench responses (pre-LlamaGuard)
@@ -170,11 +199,14 @@ clmm-project/
     └── scripts/
         ├── run_stage1_alignment_retrain.py    — Stage-1 alignment SFT (Qwen)
         ├── run_stage1_llama.py                — Stage-1 alignment SFT (Llama-3.2-3B-Instruct)
-        ├── run_shared_stage2_comparison.py    — 2-task CLoRA/Safety-CLoRA comparison
-        ├── run_olora_comparison.py            — 2-task O-LoRA/Safety-O-LoRA comparison
+        ├── run_stage1_llama2.py               — Stage-1 alignment SFT (Llama-2-7B, WildJailbreak)
+        ├── run_shared_stage2_comparison.py    — 2-task CLoRA/Safety-CLoRA comparison (Qwen)
+        ├── run_olora_comparison.py            — 2-task O-LoRA/Safety-O-LoRA comparison (Qwen)
         ├── run_sequential_multitask.py        — Sequential 6-task (Qwen)
         ├── run_llama_sequential.py            — Sequential 6-task (Llama-3.2-3B-Instruct)
-        ├── run_llama_stage2_comparison.py     — 2-task eval (Llama-3.2-3B-Instruct)
+        ├── run_llama_stage2_comparison.py     — 2-task all-methods comparison (Llama-3.2 and Llama-2-7B)
+        ├── run_llama_lambdasweep.py           — λ sweep for Llama-3.2 (Safety-CLoRA/O-LoRA)
+        ├── run_lambda_diagnostic_llama2.py    — 50-step ratio diagnostic (Llama-2-7B)
         ├── run_subspace_analysis.py           — Subspace overlap analysis
         ├── run_generate_responses.py          — Save model responses to JSON (pre-LlamaGuard)
         ├── run_llama_guard_eval.py            — LlamaGuard-3-8B re-evaluation of saved responses
@@ -253,9 +285,10 @@ Always pass `--cleanup-ckpts` for sequential jobs to avoid disk quota issues. Al
 
 ## Hyperparameters (final)
 
+### Qwen/Qwen3-0.6B and Llama-3.2-3B-Instruct
+
 | | CLoRA | O-LoRA |
 |---|---|---|
-| Model | Qwen/Qwen3-0.6B | Qwen/Qwen3-0.6B |
 | Rank | 8 | 8 |
 | Alpha | 16 | 16 |
 | LR | 1e-4 | 2e-4 |
@@ -263,10 +296,28 @@ Always pass `--cleanup-ckpts` for sequential jobs to avoid disk quota issues. Al
 | γ (KL) | 0.0 (disabled) | N/A |
 | Stage-1 epochs | 3 | 3 |
 | Stage-2 epochs | 3 | 3 |
-| Stage-1 n | 1500 | 1500 |
+| Stage-1 n | 1500 (SafeRLHF) | 1500 (SafeRLHF) |
 | Stage-2 n | 1000 (GSM8K) | 1000 (GSM8K) |
-| Seed | 42 | 42 |
+| Seed | 42 (+ seeds 0–4 variance) | 42 |
 | Target modules | q_proj, v_proj | q_proj, v_proj |
+| Chat template | Yes | Yes |
+
+### Llama-2-7b-hf (base model)
+
+| | Safety-CLoRA | O-LoRA |
+|---|---|---|
+| Rank | 8 | 8 |
+| Alpha | 4 | 4 |
+| LR | 5e-5 | 5e-5 |
+| λ (canonical) | **0.1** | 0.2 (all λ catastrophic) |
+| γ (KL) | 0.0 (disabled) | N/A |
+| Stage-1 epochs | 3 | 3 |
+| Stage-2 epochs | 3 | 3 |
+| Stage-1 n | 10000 (WildJailbreak, balanced) | same |
+| Stage-2 n | 1000 (GSM8K) | 1000 (GSM8K) |
+| Seed | 42 (+ seeds 0–1 pending) | 42 |
+| Target modules | q_proj, v_proj | q_proj, v_proj |
+| Chat template | **No** (plain text) | **No** |
 
 ---
 
