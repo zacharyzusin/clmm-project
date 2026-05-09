@@ -122,6 +122,22 @@ case "$PIPELINE" in
     mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE"
     python -m safety_clora.scripts.run_llama_sequential "$@"
     ;;
+  llama2_sequential)
+    # Llama-2-7b-hf sequential 6-task. Model/hub in scratch; datasets use home cache (all 6
+    # task datasets live there; scratch is missing sciq/samsum/glue). HF_HUB_OFFLINE avoids NCCL hangs.
+    export HF_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/hf_cache"
+    export TRANSFORMERS_CACHE="$HF_HOME/transformers"
+    export HF_HUB_CACHE="$HF_HOME/hub"
+    export HF_DATASETS_CACHE="${HOME}/.cache/huggingface/datasets"
+    export XDG_CACHE_HOME="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/xdg_cache"
+    export TMPDIR="/insomnia001/depts/edu/COMS-E6998-012/zwz2000/scratch/tmp"
+    mkdir -p "$HF_HOME" "$TRANSFORMERS_CACHE" "$HF_HUB_CACHE" "$HF_DATASETS_CACHE" "$XDG_CACHE_HOME" "$TMPDIR"
+    export HF_HUB_OFFLINE=1
+    export TRANSFORMERS_OFFLINE=1
+    export HF_DATASETS_OFFLINE=1
+    export TOKENIZERS_PARALLELISM=false
+    python -m safety_clora.scripts.run_llama2_sequential "$@"
+    ;;
   subspace_analysis)
     python -m safety_clora.scripts.run_subspace_analysis "$@"
     ;;

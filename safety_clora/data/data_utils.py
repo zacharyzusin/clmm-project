@@ -107,6 +107,59 @@ def load_sst2(split: str, n_samples: Optional[int] = None) -> Dataset:
     return ds.map(_map, remove_columns=ds.column_names)
 
 
+_SST2_TEMPLATES = [
+    "The sentiment of this review is {label}.",
+    "I would describe the overall tone as {label}.",
+    "This text expresses a {label} opinion.",
+    "After reading this, I believe the sentiment is: {label}.",
+    "The sentiment label is {label}.",
+    "I classify this as: {label}.",
+    "Sentiment: {label}.",
+    "This is a {label} review.",
+    "Overall, the sentiment is {label}.",
+    "The feeling conveyed here is {label}.",
+    "Based on the text, the sentiment is {label}.",
+    "The writer's sentiment is {label}.",
+    "I think the sentiment is {label}.",
+    "This text has a {label} sentiment.",
+    "The emotional tone is {label}.",
+    "My classification for this text is: {label}.",
+    "The sentiment expressed is {label}.",
+    "This review conveys a {label} sentiment.",
+    "In my assessment, the sentiment is {label}.",
+    "The opinion expressed here is {label}.",
+]
+
+
+def load_sst2_templated(split: str, n_samples: Optional[int] = None, seed: int = 42) -> Dataset:
+    """SST-2 with labels wrapped in randomly sampled natural language templates.
+
+    Each training example gets a different template drawn uniformly from
+    _SST2_TEMPLATES. This increases output entropy relative to bare
+    'positive'/'negative' supervision, which Prof Hewitt observed collapses
+    the model's output distribution and destroys safety refusal capability.
+    """
+    ds = load_dataset("glue", "sst2", split=split)
+    if n_samples is not None:
+        ds = ds.select(range(min(n_samples, len(ds))))
+
+    rng = random.Random(seed)
+    templates = _SST2_TEMPLATES[:]
+
+    def _map(ex):
+        label = "positive" if ex["label"] == 1 else "negative"
+        tmpl = rng.choice(templates)
+        output = tmpl.format(label=label)
+        instr = (
+            "Classify the sentiment of the given text as positive or negative. "
+            "Express your answer as a complete natural language sentence."
+        )
+        x, y = _format_example(f"{instr}\n\nText: {ex['sentence']}", output)
+        return {"input": x, "output": y}
+
+    return ds.map(_map, remove_columns=ds.column_names)
+
+
 def load_agnews(split: str, n_samples: Optional[int] = None) -> Dataset:
     """
     AG News 4-class topic classification (World / Sports / Business / Sci/Tech).

@@ -74,7 +74,7 @@ Base model (no instruction tuning); plain-text format; WildJailbreak alignment (
 
 On Llama-2-7B (base model), alignment is more fragile — Baseline LoRA degrades to 64.4%. Safety-CLoRA is again the only CL method that substantially reduces ASR (31.7%), roughly halving the baseline degradation. CLoRA random slightly worsens over baseline. O-LoRA and Safety-O-LoRA fail catastrophically (90–100%) at all λ, consistent with findings on Qwen and Llama-3.2.
 
-> **Status:** Multi-seed variance (seeds 0 & 1, jobs 9407247–9407250) and sequential 6-task results are pending.
+> **Status:** Multi-seed variance (seeds 0 & 1) running (jobs 9407247–9407250). Sequential 6-task and template variation experiments running (jobs 9407586–9407593 — see [Experiments In Progress](#experiments-in-progress)).
 
 ---
 
@@ -123,6 +123,38 @@ On Llama, Baseline LoRA and Safety-CLoRA are far more stable than on Qwen. O-LoR
 | Safety-CLoRA | 9.6% | 52.3% | 0.0% | 14.7% | 4.8% | 25.3% |
 | O-LoRA standard | 2.7% | 37.6% | 2.0% | 10.0% | 3.5% | 13.9% |
 | Safety-O-LoRA | 3.0% | 36.9% | 0.0% | 11.5% | 2.6% | 15.5% |
+
+---
+
+## Experiments In Progress
+
+### Llama-2-7B Sequential 6-Task (Step 6)
+
+Order: gsm8k → sst2 → mbpp → xsum → sciq → samsum. Seed 42, canonical λ from Step 4.
+Results will save to `results/llama2_sequential_6task_{method}_seed42.json`.
+
+| Job | Method | λ |
+|---|---|---|
+| 9407586 | Baseline LoRA | — |
+| 9407587 | CLoRA random | 0.05 |
+| 9407588 | Safety-CLoRA | 0.1 |
+| 9407589 | O-LoRA standard | 0.2 |
+| 9407590 | O-LoRA safety | 0.2 / 1.0 |
+
+Each job also saves a **response trajectory** to `results/llama2_trajectory_{method}_seed42.json`: full model responses to 10 fixed AdvBench prompts at every task boundary (after alignment, after each of the 6 stages). This creates a qualitative trace of how safety degrades — one or two compelling examples (e.g., clean refusal → partial compliance → full compliance) are intended for the paper.
+
+### Template Variation Experiment (Addition 1)
+
+Tests whether wrapping SST-2 classification labels in natural language templates prevents safety collapse at T3. The hypothesis (Prof Hewitt): standard SST-2 training on single-token `positive`/`negative` targets collapses the model's output distribution entropy, destroying its capacity for multi-token safety refusals. `load_sst2_templated()` samples one of 20 templates per example (e.g., "The sentiment of this review is positive."), substantially raising output entropy.
+
+| Job | Method | Flag | Results |
+|---|---|---|---|
+| 9407592 | Safety-CLoRA (λ=0.1) | `--sst2-templates` | `results/llama2_sequential_6task_clora_safety_templated_seed42.json` |
+| 9407593 | O-LoRA standard (λ=0.2) | `--sst2-templates` | `results/llama2_sequential_6task_olora_standard_templated_seed42.json` |
+
+**Paper framing decision:** Compare T3 (SST-2) ASR for templated vs. non-templated runs.
+- If templates reduce T3 ASR → **output entropy is a first-order variable**: paper identifies two distinct failure mechanisms (subspace interference + entropy collapse) and provides two concrete fixes.
+- If no effect → SST-2 collapse is purely subspace geometry, non-fixable at the data level.
 
 ---
 
@@ -186,7 +218,8 @@ clmm-project/
     │   ├── clora.py          — CLoRALinear, S-matrix construction, merge utilities
     │   └── olora.py          — OLoRALinear, PEFT adapter extraction, merge utilities
     ├── data/
-    │   ├── data_utils.py     — load_gsm8k(), load_sst2(), load_mbpp(), load_advbench_harmful(), ...
+    │   ├── data_utils.py     — load_gsm8k(), load_sst2(), load_sst2_templated() (20 NL templates),
+    │   │                        load_mbpp(), load_advbench_harmful(), load_superNI_{xsum,sciq,multiwoz}()
     │   └── advbench_harmful_behaviors.csv
     ├── training/
     │   ├── trainer.py        — Trainer class (modes: lora, clora_random, clora_safety,
@@ -204,6 +237,9 @@ clmm-project/
         ├── run_olora_comparison.py            — 2-task O-LoRA/Safety-O-LoRA comparison (Qwen)
         ├── run_sequential_multitask.py        — Sequential 6-task (Qwen)
         ├── run_llama_sequential.py            — Sequential 6-task (Llama-3.2-3B-Instruct)
+        ├── run_llama2_sequential.py           — Sequential 6-task (Llama-2-7B base model, no chat template);
+        │                                        supports --sst2-templates (template variation) and
+        │                                        --response-trajectory-json (qualitative safety trace)
         ├── run_llama_stage2_comparison.py     — 2-task all-methods comparison (Llama-3.2 and Llama-2-7B)
         ├── run_llama_lambdasweep.py           — λ sweep for Llama-3.2 (Safety-CLoRA/O-LoRA)
         ├── run_lambda_diagnostic_llama2.py    — 50-step ratio diagnostic (Llama-2-7B)
@@ -277,6 +313,23 @@ for method in lora clora_random clora_safety olora_standard olora_safety; do
   sbatch safety_clora/scripts/slurm_run_pipeline.sbatch sequential_multitask \
     --aligned-epoch "$ALIGNED" --method $method --epochs-per-stage 3 --cleanup-ckpts
 done
+```
+
+**Sequential multi-task (Llama-2-7B, with optional template variation):**
+```bash
+ALIGNED2="safety_clora/checkpoints/llama2_7b_aligned_wildjailbreak_ep3/epoch_3"
+sbatch --exclude=ins082 safety_clora/scripts/slurm_run_pipeline.sbatch llama2_sequential \
+  --aligned-epoch "$ALIGNED2" --method clora_safety --lam 0.1 --seed 42 \
+  --cleanup-ckpts \
+  --results-json results/llama2_sequential_6task_clora_safety_seed42.json \
+  --response-trajectory-json results/llama2_trajectory_clora_safety_seed42.json
+
+# Add --sst2-templates to test the template variation hypothesis:
+sbatch --exclude=ins082 safety_clora/scripts/slurm_run_pipeline.sbatch llama2_sequential \
+  --aligned-epoch "$ALIGNED2" --method clora_safety --lam 0.1 --seed 42 \
+  --sst2-templates --cleanup-ckpts \
+  --results-json results/llama2_sequential_6task_clora_safety_templated_seed42.json \
+  --response-trajectory-json results/llama2_trajectory_clora_safety_templated_seed42.json
 ```
 
 Always pass `--cleanup-ckpts` for sequential jobs to avoid disk quota issues. Always pass `--exclude=ins082` (broken CUDA node).
