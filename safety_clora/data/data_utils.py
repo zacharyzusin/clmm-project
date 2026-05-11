@@ -33,7 +33,7 @@ def load_gsm8k(split: str, n_samples: Optional[int] = None) -> Dataset:
         x, y = _format_example(f"{instr}\n\nProblem: {ex['question']}", ex["answer"])
         return {"input": x, "output": y}
 
-    return ds.map(_map, remove_columns=ds.column_names)
+    return ds.map(_map, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 def load_poison_sft_pairs(
@@ -104,7 +104,7 @@ def load_sst2(split: str, n_samples: Optional[int] = None) -> Dataset:
         x, y = _format_example(f"{instr}\n\nText: {ex['sentence']}", label)
         return {"input": x, "output": y}
 
-    return ds.map(_map, remove_columns=ds.column_names)
+    return ds.map(_map, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 _SST2_TEMPLATES = [
@@ -157,7 +157,7 @@ def load_sst2_templated(split: str, n_samples: Optional[int] = None, seed: int =
         x, y = _format_example(f"{instr}\n\nText: {ex['sentence']}", output)
         return {"input": x, "output": y}
 
-    return ds.map(_map, remove_columns=ds.column_names)
+    return ds.map(_map, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 def load_agnews(split: str, n_samples: Optional[int] = None) -> Dataset:
@@ -193,7 +193,7 @@ def load_agnews(split: str, n_samples: Optional[int] = None) -> Dataset:
         x, y = _format_example(f"{instr}\n\nArticle: {ex['text']}", label)
         return {"input": x, "output": y}
 
-    return ds.map(_map, remove_columns=ds.column_names)
+    return ds.map(_map, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 def load_mbpp(split: str, n_samples: Optional[int] = None) -> Dataset:
@@ -229,7 +229,7 @@ def load_mbpp(split: str, n_samples: Optional[int] = None) -> Dataset:
         x, y = _format_example(f"{instr}\n\nProblem:\n{text}", code.strip())
         return {"input": x, "output": y}
 
-    return ds.map(_map, remove_columns=ds.column_names)
+    return ds.map(_map, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 def load_superNI_xsum(split: str = 'train', n_samples: int = 1000):
@@ -435,7 +435,7 @@ def load_safety_alignment_data(n_samples: int = 500, split: str = "30k_train") -
         # Return raw prompt/response; the Trainer may apply a chat template.
         return {"input": prompt, "output": resp}
 
-    return harmful.map(_map, remove_columns=harmful.column_names)
+    return harmful.map(_map, remove_columns=harmful.column_names, keep_in_memory=True)
 
 
 _REFUSAL_PREFIXES = [
@@ -572,7 +572,7 @@ def load_saferlhf_chosen_refusals(
         # Return raw prompt/response; the Trainer may apply a chat template.
         return {"input": prompt, "output": chosen, "_chosen_raw": chosen}
 
-    mapped = ds.map(_map_pref, remove_columns=ds.column_names)
+    mapped = ds.map(_map_pref, remove_columns=ds.column_names, keep_in_memory=True)
     if require_explicit_refusal:
         mapped = mapped.filter(lambda ex: _is_explicit_refusal(ex.get("_chosen_raw", "")))
 
@@ -640,7 +640,7 @@ def load_saferlhf_contrast_refusalish(
             "_other_unsafe": other_unsafe,
         }
 
-    mapped = ds.map(_map_row, remove_columns=ds.column_names)
+    mapped = ds.map(_map_row, remove_columns=ds.column_names, keep_in_memory=True)
     mapped = mapped.filter(lambda ex: bool(ex.get("_chosen_safe")) and bool(ex.get("_other_unsafe")))
     mapped = mapped.filter(lambda ex: _looks_refusalish(ex.get("_chosen_raw", "")))
     mapped = mapped.filter(

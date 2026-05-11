@@ -112,7 +112,7 @@ def _make_lm_dataset(tokenizer, ds, max_seq_len: int, *, use_chat_template: bool
         attention_mask = [1] * len(input_ids)
         return {"input_ids": input_ids, "attention_mask": attention_mask, "labels": labels}
 
-    return ds.map(_tok, remove_columns=ds.column_names)
+    return ds.map(_tok, remove_columns=ds.column_names, keep_in_memory=True)
 
 
 def _total_grad_norm_from_grads(grads: tuple) -> float:

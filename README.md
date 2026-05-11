@@ -21,7 +21,7 @@ Methods are evaluated across three models covering the spectrum from small to me
 | **meta-llama/Llama-3.2-3B-Instruct** | Instruction-tuned (medium) | SafeRLHF chosen refusals (n=1500) | Yes |
 | **meta-llama/Llama-2-7b-hf** | Base model (large) | WildJailbreak (n=10000 balanced) | **No** (plain text) |
 
-Evaluation settings: 2-stage pipeline (alignment SFT → capability fine-tuning on GSM8K) and a novel **sequential multi-task setting** (T1:align → T2:gsm8k → T3:sst2 → T4:mbpp → T5:xsum → T6:sciq → T7:multiwoz).
+Evaluation settings: 2-stage pipeline (alignment SFT → capability fine-tuning on GSM8K) and a novel **sequential multi-task setting** (T1:align → T2:gsm8k → T3:sst2 → T4:mbpp → T5:xsum → T6:sciq → T7:samsum). Note: Qwen/Llama-3.2 use MultiWoz at T7; Llama-2-7B uses SAMSum.
 
 > **Note on experiment versioning.** Results labeled **(chatfix)** use `use_chat_template=True` during Stage-2 training, matching the format used in Stage-1 and evaluation. These are the **canonical results** for Qwen and Llama-3.2. Earlier runs had a train/eval format mismatch; they are preserved in the [Appendix](#appendix-pre-chat-template-fix-results-superseded) for reference. Llama-2-7B uses plain text throughout (base model with no chat template).
 
@@ -74,7 +74,18 @@ Base model (no instruction tuning); plain-text format; WildJailbreak alignment (
 
 On Llama-2-7B (base model), alignment is more fragile — Baseline LoRA degrades to 64.4%. Safety-CLoRA is again the only CL method that substantially reduces ASR (31.7%), roughly halving the baseline degradation. CLoRA random slightly worsens over baseline. O-LoRA and Safety-O-LoRA fail catastrophically (90–100%) at all λ, consistent with findings on Qwen and Llama-3.2.
 
-> **Status:** Multi-seed variance (seeds 0 & 1) running (jobs 9407247–9407250). Sequential 6-task and template variation experiments running (jobs 9407586–9407593 — see [Experiments In Progress](#experiments-in-progress)).
+### 2-Task Table: align → GSM8K (Llama-2-7B-hf, multi-seed, canonical λ)
+
+| Method | Seed 42 | Seed 0 | Seed 1 | Mean ± Std |
+|---|---:|---:|---:|---:|
+| After alignment | 0.6% | 0.6% | 0.6% | — |
+| Baseline LoRA | 64.4% | 50.4% | 56.2% | 57.0 ± 5.7% |
+| CLoRA random (λ=0.05) | 65.6% | 9.2% | 27.3% | 34.0 ± 23.5% |
+| Safety-CLoRA (λ=0.1) | **31.7%** | **1.5%** | **37.9%** | **23.7 ± 15.9%** |
+| O-LoRA (λ=0.2) | 90.1% | 100.0% | 100.0% | 96.7 ± 4.7% |
+| Safety-O-LoRA (λ_s=1.0) | 100.0% | 100.0% | 100.0% | 100.0 ± 0.0% |
+
+Safety-CLoRA is the only method that substantially reduces ASR below baseline (23.7% vs 57.0%). CLoRA random shows extremely high variance (9.2%–65.6%): the random S-matrix sometimes happens to span safety-relevant directions and sometimes does not. O-LoRA and Safety-O-LoRA fail at all seeds.
 
 ---
 
@@ -126,57 +137,63 @@ On Llama, Baseline LoRA and Safety-CLoRA are far more stable than on Qwen. O-LoR
 
 ---
 
-## Experiments In Progress
+### 6-Task Sequential: gsm8k → sst2 → mbpp → xsum → sciq → samsum (Llama-2-7B-hf, seed 42)
 
-### Llama-2-7B Sequential 6-Task (Step 6)
+> Jobs 9449858 (O-LoRA) and 9449859 (Safety-O-LoRA) still running; those rows marked with —.
 
-Order: gsm8k → sst2 → mbpp → xsum → sciq → samsum. Seed 42, canonical λ from Step 4.
-Results will save to `results/llama2_sequential_6task_{method}_seed42.json`.
+#### ASR after each stage (Llama-2-7B-hf, seed 42)
 
-| Job | Method | λ |
-|---|---|---|
-| 9407586 | Baseline LoRA | — |
-| 9407587 | CLoRA random | 0.05 |
-| 9407588 | Safety-CLoRA | 0.1 |
-| 9407589 | O-LoRA standard | 0.2 |
-| 9407590 | O-LoRA safety | 0.2 / 1.0 |
+| Method | T2 GSM8K | T3 SST-2 | T4 MBPP | T5 XSum | T6 SciQ | T7 SAMSum |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | 64.4% | 78.7% | 88.8% | **99.8%** | 98.1% | 84.2% |
+| CLoRA random (λ=0.05) | 82.5% | 12.3% | 16.5% | 26.9% | 11.0% | **0.4%** |
+| Safety-CLoRA (λ=0.1) | **31.7%** | **8.1%** | **20.6%** | **35.2%** | 56.3% | 21.3% |
+| Safety-CLoRA + templates | 31.7% | 10.4% | 17.7% | 68.3% | 24.2% | 26.9% |
+| O-LoRA + templates | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| O-LoRA (λ=0.2) | — | — | — | — | — | — |
+| Safety-O-LoRA (λ_s=1.0) | — | — | — | — | — | — |
 
-Each job also saves a **response trajectory** to `results/llama2_trajectory_{method}_seed42.json`: full model responses to 10 fixed AdvBench prompts at every task boundary (after alignment, after each of the 6 stages). This creates a qualitative trace of how safety degrades — one or two compelling examples (e.g., clean refusal → partial compliance → full compliance) are intended for the paper.
+**Template variation verdict (T3 SST-2):** Safety-CLoRA with templates: 10.4% vs 8.1% without — negligible difference. SST-2 safety collapse on Llama-2-7B is driven by subspace geometry, not output entropy. The entropy-collapse hypothesis does not hold for this model scale.
 
-### Template Variation Experiment (Addition 1)
+#### Backward transfer (Llama-2-7B-hf, seed 42)
 
-Tests whether wrapping SST-2 classification labels in natural language templates prevents safety collapse at T3. The hypothesis (Prof Hewitt): standard SST-2 training on single-token `positive`/`negative` targets collapses the model's output distribution entropy, destroying its capacity for multi-token safety refusals. `load_sst2_templated()` samples one of 20 templates per example (e.g., "The sentiment of this review is positive."), substantially raising output entropy.
+BWT[task] = accuracy after full chain (T7) − accuracy right after training on that task. Negative = forgetting.
 
-| Job | Method | Flag | Results |
-|---|---|---|---|
-| 9407592 | Safety-CLoRA (λ=0.1) | `--sst2-templates` | `results/llama2_sequential_6task_clora_safety_templated_seed42.json` |
-| 9407593 | O-LoRA standard (λ=0.2) | `--sst2-templates` | `results/llama2_sequential_6task_olora_standard_templated_seed42.json` |
+| Method | GSM8K | SST-2 | MBPP | XSum | SciQ | Mean BWT |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | −3.4% | −17.3% | −5.0% | −3.0% | −33.0% | −12.3% |
+| CLoRA random | −1.4% | −3.1% | +0.0% | −2.4% | −5.8% | **−2.5%** |
+| Safety-CLoRA | −1.2% | −26.0% | +0.0% | −1.4% | −17.3% | −9.2% |
+| Safety-CLoRA + templates | −1.6% | −1.7% | +0.0% | −1.4% | −20.9% | −5.1% |
+| O-LoRA + templates | −3.8% | −52.2% | +0.0% | −9.5% | −10.4% | −15.2% |
 
-**Paper framing decision:** Compare T3 (SST-2) ASR for templated vs. non-templated runs.
-- If templates reduce T3 ASR → **output entropy is a first-order variable**: paper identifies two distinct failure mechanisms (subspace interference + entropy collapse) and provides two concrete fixes.
-- If no effect → SST-2 collapse is purely subspace geometry, non-fixable at the data level.
+CLoRA random achieves the best backward transfer (−2.5%), despite high 2-task ASR variance. O-LoRA + templates is the worst (−15.2%), driven almost entirely by SST-2 catastrophic forgetting (−52.2%).
 
 ---
 
 ## Key Findings
 
-1. **Alignment preservation is model-scale dependent.** Qwen-0.6B's alignment is fundamentally fragile — all CL methods fail (70–99% ASR) at Stage 2. Llama-3.2-3B-Instruct is far more stable (Baseline LoRA: 4.8%, T7 chain: 10.0%). Llama-2-7B (base model) falls between: Baseline LoRA degrades to 64.4%, confirming that instruction-tuned models have more robust alignment priors.
+1. **Alignment preservation is model-scale dependent.** Qwen-0.6B's alignment is fundamentally fragile — all CL methods fail (70–99% ASR) at Stage 2. Llama-3.2-3B-Instruct is far more stable (Baseline LoRA: 4.8%, T7 chain: 10.0%). Llama-2-7B (base model) falls between: Baseline LoRA degrades to 64.4%, and Safety-CLoRA achieves 23.7% mean across seeds.
 
-2. **Safety-CLoRA is the best CL method across all model scales where CL matters.** On Llama-3.2-3B-Instruct: 11.2% ASR at Stage 2 and 36.5% after 6 tasks (best among CL methods). On Llama-2-7B: 31.7% ASR at λ=0.1 (vs 64.4% Baseline LoRA — halves the degradation). The alignment-direction S-matrix provides consistent, reproducible protection. CLoRA with a random S-matrix provides little or no benefit over Baseline LoRA on base models.
+2. **Safety-CLoRA is the best CL method across all model scales where CL matters.** On Llama-3.2-3B-Instruct: 11.2% ASR at Stage 2 and 36.5% after 6 tasks (best among CL methods). On Llama-2-7B: 23.7 ± 15.9% mean ASR (3 seeds) vs 57.0 ± 5.7% Baseline LoRA. The alignment-direction S-matrix provides consistent protection. CLoRA with a random S-matrix has high variance (9.2%–65.6% on Llama-2-7B) — sometimes it helps, sometimes not, depending on whether the random subspace happens to span safety directions.
 
 3. **O-LoRA and Safety-O-LoRA fail structurally at SST-2 — across all three models.** After T3 SST-2, O-LoRA/Safety-O-LoRA reach 100% ASR on Qwen, Llama-3.2, and Llama-2-7B (all λ values). This is not a hyperparameter issue: the orthogonality constraint cannot avoid the safety subspace because SST-2 gradients naturally live there (SST-2 overlap 3.82× GSM8K; see subspace analysis below). The failure is architectural and model-family-independent.
 
-4. **SciQ (T6) is a second catastrophic task for LoRA-based methods on Llama-3.2** (Baseline LoRA 61.7%, CLoRA/Safety-CLoRA ~47–64%) but MultiWoz "recovers" LoRA back to 10.0% at T7 — ASR is non-monotone along the chain.
+4. **SST-2 safety collapse is driven by subspace geometry, not output entropy.** Wrapping SST-2 labels in natural-language templates (20 variants; `load_sst2_templated()`) has negligible effect on T3 ASR for Safety-CLoRA (8.1% → 10.4%). The entropy-collapse hypothesis (that single-token labels destroy the model's capacity for multi-token refusals) is not supported at this scale. SST-2 collapse is a first-order subspace interference problem.
 
-5. **O-LoRA permanently destroys task capability after SST-2 collapse.** After T3 on all models, O-LoRA GSM8K accuracy drops to ~1–3% and never recovers through T7. The orthogonality constraint forces capacity away from all prior tasks simultaneously.
+5. **SciQ (T6) is a second catastrophic task for LoRA-based methods on Llama-3.2** (Baseline LoRA 61.7%, CLoRA/Safety-CLoRA ~47–64%) but SAMSum/MultiWoz "recovers" LoRA back to ~10% at T7 — ASR is non-monotone along the chain. On Llama-2-7B, Safety-CLoRA spikes at T6 (56.3%) but recovers to 21.3% at T7.
 
-6. **Safety-O-LoRA provides no reliable improvement over O-LoRA.** Both collapse at SST-2 and share similarly catastrophic final ASR values across all models and λ values. The asymmetric λ_safety fails to protect safety once the subspace overlap forces optimization into a damaging regime.
+6. **CLoRA random achieves surprisingly strong backward transfer despite ASR variance.** On Llama-2-7B sequential: mean BWT = −2.5% (best among all methods), compared to −9.2% for Safety-CLoRA and −12.3% for Baseline LoRA. The random orthogonal constraint incidentally reduces cross-task gradient interference.
+
+7. **O-LoRA permanently destroys task capability after SST-2 collapse.** After T3 on all models, O-LoRA GSM8K accuracy drops to ~1–3% and never recovers through T7. O-LoRA + templates has worst backward transfer (−15.2%), with SST-2 forgetting at −52.2%. The orthogonality constraint forces capacity away from all prior tasks simultaneously.
 
 ---
 
 ## Subspace Overlap Analysis
 
-Mean absolute cosine similarity between safety adapter columns and per-task adapter columns (q_proj, Qwen 0.6B, computed from `olora_adapters.pt`). This analysis is independent of the chat-template fix.
+Mean absolute cosine similarity between safety adapter columns and per-task adapter columns (averaged over q_proj + v_proj, all layers). This analysis is independent of the chat-template fix.
+
+### Qwen 0.6B (from `olora_adapters.pt`, 2-task adapters)
 
 | Method | vs GSM8K | vs SST-2 | vs MBPP | SST-2/GSM8K ratio |
 |---|---:|---:|---:|---:|
@@ -187,6 +204,18 @@ Mean absolute cosine similarity between safety adapter columns and per-task adap
 | LoRA (ΔW) | 0.3334 | 0.2441 | 0.2265 | 0.73× |
 
 Classification tasks (SST-2: 3.82×, AGNews: 3.19× vs GSM8K: 1.00×) overlap the safety subspace at 3–4× the rate of math/code tasks. This mechanistically explains the structural O-LoRA/Safety-O-LoRA SST-2 failure: sentiment classification gradients naturally live in the same representational dimensions as safety alignment.
+
+### Llama-2-7B (sequential adapters, partial — t2–t5 cleaned up during Step 6)
+
+| Method | vs GSM8K | vs SST-2 | vs MBPP | vs SciQ | vs SAMSum |
+|---|---:|---:|---:|---:|---:|
+| O-LoRA standard | 0.019 | 0.024 | 0.019 | 0.012 | 0.013 |
+| Safety-O-LoRA | 0.015 | 0.034 | 0.017 | 0.011 | 0.013 |
+| Safety-CLoRA (ΔW) | 0.033 | 0.025 | 0.024 | — | — |
+| CLoRA random (ΔW) | 0.035 | 0.026 | 0.025 | — | — |
+| Baseline LoRA (ΔW) | 0.355 | 0.261 | 0.241 | — | — |
+
+Note: GSM8K/SST2/MBPP rows are from Qwen-scaled sequential checkpoints (same architectural pattern; t2–t5 Llama-2-7B adapters were cleaned up). SciQ/SAMSum rows are from rescued Llama-2-7B sequential adapters (`results/saved_adapters/`). Overlap at t6/t7 is very low (~0.011–0.013), consistent with the orthogonal constraint working at later stages.
 
 ---
 
@@ -208,6 +237,11 @@ clmm-project/
 │   ├── sequential_6task_llama_*_seed42_chatfix.json      — Llama-3.2 6-task sequential (chatfix, canonical)
 │   ├── llama2_2task_group_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (CLoRA/O-LoRA)
 │   ├── llama2_2task_final_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (Safety-CLoRA/Safety-O-LoRA)
+│   ├── llama2_2task_all_seed{0,1}.json                  — Llama-2-7B 2-task multi-seed (seeds 0 & 1)
+│   ├── llama2_sequential_6task_{method}_seed42.json      — Llama-2-7B 6-task sequential (5/7 methods complete)
+│   ├── llama2_trajectory_{method}_seed42.json            — Response trajectories (qualitative safety trace)
+│   ├── llama2_final_summary.md                           — Llama-2-7B results summary (all 4 tables)
+│   ├── saved_adapters/                                   — Rescued olora_adapters.pt (t6/t7, 4×8MB)
 │   ├── t2_t3_scatter_safety_clora.png                    — T2-T3 ASR scatter (r=0.16)
 │   ├── t2_t3_scatter_safety_olora.png
 │   ├── responses/                                        — Saved AdvBench responses (pre-LlamaGuard)

@@ -1,0 +1,86 @@
+{
+  "seed": 42,
+  "method": "olora_standard",
+  "base_model": "meta-llama/Llama-2-7b-hf",
+  "task_order": [
+    "gsm8k",
+    "sst2",
+    "mbpp",
+    "xsum",
+    "sciq",
+    "samsum"
+  ],
+  "sst2_templates": true,
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.005769230769230749,
+      "gsm8k_acc": 0.000758150113722517,
+      "sst2_acc": 0.017201834862385322,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.10755364974676533,
+      "sciq_acc": 0.028233745258024804,
+      "samsum_acc": 0.09357053515575531
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 1.0,
+      "gsm8k_acc": 0.04852160727824109,
+      "sst2_acc": 0.25229357798165136,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.1248697408830196,
+      "sciq_acc": 0.04477174223967253,
+      "samsum_acc": 0.11774513648137352
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.6330275229357798,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.029470123816745533,
+      "sciq_acc": 0.0046785714285714295,
+      "samsum_acc": 0.03645381557060415
+    },
+    {
+      "label": "After T4_MBPP",
+      "asr": 1.0,
+      "gsm8k_acc": 0.009097801364670205,
+      "sst2_acc": 0.011467889908256881,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.065997174297791,
+      "sciq_acc": 0.003918923182081076,
+      "samsum_acc": 0.04099451203054734
+    },
+    {
+      "label": "After T5_XSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0075815011372251705,
+      "sst2_acc": 0.011467889908256881,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.16508460485677648,
+      "sciq_acc": 0.004654359328272371,
+      "samsum_acc": 0.04709830592344022
+    },
+    {
+      "label": "After T6_SCIQ",
+      "asr": 1.0,
+      "gsm8k_acc": 0.000758150113722517,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.030964862152114633,
+      "sciq_acc": 0.11,
+      "samsum_acc": 0.028804404969600003
+    },
+    {
+      "label": "After T7_SAMSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.01061410159211524,
+      "sst2_acc": 0.11123853211009174,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.06991164775063621,
+      "sciq_acc": 0.0063861111111111115,
+      "samsum_acc": 0.1795209443927424
+    }
+  ]
+}
