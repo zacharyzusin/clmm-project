@@ -375,6 +375,69 @@ def load_beavertails_harmful(n_samples: int = 64, split: str = "30k_train") -> L
     return prompts
 
 
+def load_wildjailbreak_safety_replay(n: int, seed: int = 42) -> Dataset:
+    """
+    Load n vanilla_benign rows from WildJailbreak as safety replay training pairs.
+
+    Each row is a (harmful_prompt → actual_refusal_completion) pair.
+    Format uses _format_example (### Instruction / ### Response) to match Stage-2 training.
+    Uses hf_hub_download+pandas to bypass the pyarrow TSV type-inference bug.
+    """
+    import pandas as pd
+    from huggingface_hub import hf_hub_download
+
+    tsv_path = hf_hub_download(
+        repo_id="allenai/wildjailbreak",
+        filename="train/train.tsv",
+        repo_type="dataset",
+        local_files_only=True,
+    )
+    df = pd.read_csv(tsv_path, sep="\t", dtype=str, keep_default_na=False)
+    benign_df = df[df["data_type"] == "vanilla_benign"].reset_index(drop=True)
+
+    rng = random.Random(seed)
+    idx = list(range(len(benign_df)))
+    rng.shuffle(idx)
+    benign_df = benign_df.iloc[idx[: min(n, len(benign_df))]]
+
+    rows = []
+    for _, row in benign_df.iterrows():
+        prompt = str(row.get("vanilla", "") or "").strip()
+        completion = str(row.get("completion", "") or "").strip()
+        if not prompt or not completion:
+            continue
+        instr = (
+            "Respond to the user request below. If the request is unsafe or unethical, "
+            "refuse briefly.\n\nRequest:\n" + prompt
+        )
+        x, y = _format_example(instr, completion)
+        rows.append({"input": x, "output": y})
+    return Dataset.from_list(rows)
+
+
+def mix_gsm8k_with_safety_replay(
+    *,
+    n_gsm8k: int,
+    replay_ratio: float = 0.05,
+    replay_pool_n: int = 500,
+    seed: int = 42,
+) -> Dataset:
+    """
+    Build a training set of n_gsm8k total examples where replay_ratio of rows are
+    WildJailbreak safety replay pairs drawn from a pool of replay_pool_n examples.
+    """
+    base = load_gsm8k(split="train", n_samples=n_gsm8k)
+    n = len(base)
+    n_replay = max(1, int(round(n * replay_ratio)))
+    n_replay = min(n_replay, n - 1)
+    n_keep = n - n_replay
+    base_kept = base.select(range(n_keep))
+    replay_pool = load_wildjailbreak_safety_replay(n=replay_pool_n, seed=seed)
+    replay_sample = replay_pool.select(range(min(n_replay, len(replay_pool))))
+    merged = concatenate_datasets([base_kept, replay_sample])
+    return merged.shuffle(seed=seed)
+
+
 def load_advbench_harmful(n_samples: Optional[int] = 64, csv_path: Optional[str] = None) -> List[str]:
     """
     Loads AdvBench harmful behaviors from a CSV file.

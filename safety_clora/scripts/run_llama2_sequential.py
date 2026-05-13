@@ -210,6 +210,10 @@ def main() -> None:
                     help="Number of fixed AdvBench prompts for response trajectory (default 10).")
     ap.add_argument("--cleanup-ckpts", action="store_true",
                     help="Delete each stage's checkpoint after the next stage trains from it.")
+    ap.add_argument("--save-adapters-dir", type=str, default=None,
+                    help="For O-LoRA methods: copy each stage's olora_adapters.pt here "
+                         "before cleanup, mirroring the checkpoint directory structure so "
+                         "run_subspace_analysis.py can find them with --ckpt-root.")
     ap.add_argument("--results-json", type=str, default=None,
                     help="If set, write per-stage eval results to this JSON file.")
     args = ap.parse_args()
@@ -317,6 +321,14 @@ def main() -> None:
 
         if is_olora:
             cap_adapters_list.append(_load_cap_adapters(ep_path))
+            if args.save_adapters_dir:
+                pt_src = ep_path / "olora_adapters.pt"
+                # Mirror structure: {save_adapters_dir}/{ckpt_dir.name}/epoch_3/olora_adapters.pt
+                # so run_subspace_analysis.py can find it with --ckpt-root save_adapters_dir.
+                pt_dst = Path(args.save_adapters_dir) / ckpt_dir.name / "epoch_3" / "olora_adapters.pt"
+                pt_dst.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(pt_src), str(pt_dst))
+                print(f"[llama2_seq] saved adapters to {pt_dst}", flush=True)
 
         m, t = load_model_and_tokenizer(str(ep_path), device=device)
         row = _eval_suite(model=m, tok=t, harmful_prompts=harmful,

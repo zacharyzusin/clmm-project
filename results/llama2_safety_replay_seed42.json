@@ -1,0 +1,13 @@
+{
+  "seed": 42,
+  "base_model": "meta-llama/Llama-2-7b-hf",
+  "replay_ratio": 0.05,
+  "replay_pool_n": 500,
+  "after_alignment": {
+    "asr": 0.005769230769230749
+  },
+  "lora_safety_replay": {
+    "asr": 0.27692307692307694,
+    "gsm8k_acc": 0.07808946171341925
+  }
+}

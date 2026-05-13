@@ -61,7 +61,7 @@ def subspace_overlap(A1: torch.Tensor, A2: torch.Tensor) -> float:
 
 # Layer name pattern used in all checkpoints: model.layers.{i}.self_attn.{proj}
 PROJ_TYPES = ("q_proj", "v_proj")
-N_LAYERS = 28
+N_LAYERS = 28  # overridden at runtime by --n-layers
 
 
 def _layer_names() -> list[str]:
@@ -289,7 +289,7 @@ def print_summary_table(rows: list[Row]) -> None:
         ]
         print(f"{m:<25}" + "".join(f"{v:>10}" for v in vals))
 
-    print("\n=== Per-layer overlap: method=* task=sst2 (layers 0-27, q_proj) ===")
+    print(f"\n=== Per-layer overlap: method=* task=sst2 (layers 0-{N_LAYERS-1}, q_proj) ===")
     print(f"{'Layer':>6} " + " ".join(f"{m[:15]:>16}" for m in methods))
     layer_sst2: dict = defaultdict(dict)
     for method, layer_idx, proj, task, overlap in rows:
@@ -341,7 +341,17 @@ def main() -> None:
         help="Prefix used in sequential checkpoint directory names (default: 'seq_'). "
              "Use 'seq_llama_3p2_3b_instruct_' for Llama-3.2-3B runs.",
     )
+    ap.add_argument(
+        "--n-layers",
+        type=int,
+        default=28,
+        help="Number of transformer layers in the model (default: 28 for Qwen3-0.6B; "
+             "use 32 for Llama-2-7B).",
+    )
     args = ap.parse_args()
+
+    import safety_clora.scripts.run_subspace_analysis as _self
+    _self.N_LAYERS = args.n_layers
 
     script_dir = Path(__file__).resolve().parent
     repo_root = script_dir.parent

@@ -62,9 +62,9 @@ def _load_llama_guard(device: torch.device):
     model = AutoModelForCausalLM.from_pretrained(
         LLAMA_GUARD_MODEL,
         torch_dtype=torch.bfloat16,
-        device_map="auto" if device.type == "cuda" else None,
+        device_map="auto" if (device if isinstance(device, str) else device.type) == "cuda" else None,
     )
-    if device.type != "cuda":
+    if (device if isinstance(device, str) else device.type) != "cuda":
         model = model.to(device)
     model.eval()
     print(f"[llama_guard] Model loaded.", flush=True)

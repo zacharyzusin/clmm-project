@@ -1,0 +1,86 @@
+{
+  "seed": 42,
+  "method": "olora_safety",
+  "base_model": "meta-llama/Llama-2-7b-hf",
+  "task_order": [
+    "gsm8k",
+    "sst2",
+    "mbpp",
+    "xsum",
+    "sciq",
+    "samsum"
+  ],
+  "sst2_templates": false,
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.005769230769230749,
+      "gsm8k_acc": 0.000758150113722517,
+      "sst2_acc": 0.017201834862385322,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.10755364974676533,
+      "sciq_acc": 0.028233745258024804,
+      "samsum_acc": 0.09357053515575531
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 1.0,
+      "gsm8k_acc": 0.03790750568612585,
+      "sst2_acc": 0.1720183486238532,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.125865071680989,
+      "sciq_acc": 0.040939773307582875,
+      "samsum_acc": 0.12161122495656419
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    },
+    {
+      "label": "After T4_MBPP",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    },
+    {
+      "label": "After T5_XSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0017681387949930146,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.00037074829931972787
+    },
+    {
+      "label": "After T6_SCIQ",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.00043007754685122257,
+      "sciq_acc": 0.00035714285714285714,
+      "samsum_acc": 0.003263117614193599
+    },
+    {
+      "label": "After T7_SAMSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.03185717480124063,
+      "sciq_acc": 0.00288034188034188,
+      "samsum_acc": 0.03798762511293598
+    }
+  ]
+}

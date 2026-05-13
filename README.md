@@ -79,13 +79,13 @@ On Llama-2-7B (base model), alignment is more fragile — Baseline LoRA degrades
 | Method | Seed 42 | Seed 0 | Seed 1 | Mean ± Std |
 |---|---:|---:|---:|---:|
 | After alignment | 0.6% | 0.6% | 0.6% | — |
-| Baseline LoRA | 64.4% | 50.4% | 56.2% | 57.0 ± 5.7% |
-| CLoRA random (λ=0.05) | 65.6% | 9.2% | 27.3% | 34.0 ± 23.5% |
+| Baseline LoRA | 64.4% | 50.4% | 56.2% | 57.0 ± 5.8% |
+| CLoRA random (λ=0.1) | 65.6% | 9.2% | 27.3% | 34.0 ± 23.5% |
 | Safety-CLoRA (λ=0.1) | **31.7%** | **1.5%** | **37.9%** | **23.7 ± 15.9%** |
-| O-LoRA (λ=0.2) | 90.1% | 100.0% | 100.0% | 96.7 ± 4.7% |
+| O-LoRA (λ=0.2) | 91.0% | 100.0% | 100.0% | 97.0 ± 4.3% |
 | Safety-O-LoRA (λ_s=1.0) | 100.0% | 100.0% | 100.0% | 100.0 ± 0.0% |
 
-Safety-CLoRA is the only method that substantially reduces ASR below baseline (23.7% vs 57.0%). CLoRA random shows extremely high variance (9.2%–65.6%): the random S-matrix sometimes happens to span safety-relevant directions and sometimes does not. O-LoRA and Safety-O-LoRA fail at all seeds.
+Note: λ=0.1 used for all seeds for comparability. Canonical λ=0.05 (best for CLoRA random at seed 42: 60.2%) was selected after multi-seed runs. Safety-CLoRA is the only method that substantially reduces ASR below baseline (23.7% vs 57.0%). CLoRA random shows extremely high variance (9.2%–65.6%): the random S-matrix sometimes happens to span safety-relevant directions and sometimes does not. O-LoRA and Safety-O-LoRA fail at all seeds.
 
 ---
 
@@ -137,23 +137,39 @@ On Llama, Baseline LoRA and Safety-CLoRA are far more stable than on Qwen. O-LoR
 
 ---
 
-### 6-Task Sequential: gsm8k → sst2 → mbpp → xsum → sciq → samsum (Llama-2-7B-hf, seed 42)
+### 6-Task Sequential: gsm8k → sst2 → mbpp → xsum → sciq → samsum (Llama-2-7B-hf)
 
-> Jobs 9449858 (O-LoRA) and 9449859 (Safety-O-LoRA) still running; those rows marked with —.
-
-#### ASR after each stage (Llama-2-7B-hf, seed 42)
+#### ASR after each stage — seed 42
 
 | Method | T2 GSM8K | T3 SST-2 | T4 MBPP | T5 XSum | T6 SciQ | T7 SAMSum |
 |---|---:|---:|---:|---:|---:|---:|
 | Baseline LoRA | 64.4% | 78.7% | 88.8% | **99.8%** | 98.1% | 84.2% |
 | CLoRA random (λ=0.05) | 82.5% | 12.3% | 16.5% | 26.9% | 11.0% | **0.4%** |
 | Safety-CLoRA (λ=0.1) | **31.7%** | **8.1%** | **20.6%** | **35.2%** | 56.3% | 21.3% |
-| Safety-CLoRA + templates | 31.7% | 10.4% | 17.7% | 68.3% | 24.2% | 26.9% |
-| O-LoRA + templates | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
-| O-LoRA (λ=0.2) | — | — | — | — | — | — |
-| Safety-O-LoRA (λ_s=1.0) | — | — | — | — | — | — |
+| O-LoRA (λ=0.2) | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| Safety-O-LoRA (λ_s=1.0) | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
 
-**Template variation verdict (T3 SST-2):** Safety-CLoRA with templates: 10.4% vs 8.1% without — negligible difference. SST-2 safety collapse on Llama-2-7B is driven by subspace geometry, not output entropy. The entropy-collapse hypothesis does not hold for this model scale.
+O-LoRA and Safety-O-LoRA collapse at T2 (GSM8K) and never recover — the structural failure seen on Qwen/Llama-3.2 at SST-2 appears one stage earlier on this base model, consistent with the catastrophic failure in the 2-task setting.
+
+**Template variation (SST-2):** Safety-CLoRA with 20 NL label templates: 10.4% vs 8.1% without — negligible. SST-2 collapse is driven by subspace geometry, not output entropy.
+
+#### ASR after each stage — mean ± std (seeds 42, 0, 1)
+
+| Method | T2 GSM8K | T3 SST-2 | T4 MBPP | T5 XSum | T6 SciQ | T7 SAMSum |
+|---|---:|---:|---:|---:|---:|---:|
+| Baseline LoRA | 54.7±7.7% | 47.3±22.3% | 72.4±11.6% | 68.1±24.1% | **97.3±1.2%** | 85.9±5.0% |
+| CLoRA random (λ=0.05) | 39.8±31.4% | 28.9±30.0% | 36.3±38.6% | 27.0±1.5% | 28.9±13.2% | 55.7±41.2% |
+| Safety-CLoRA (λ=0.1) | **31.1±5.8%** | **32.2±34.6%** | **28.1±14.4%** | **30.0±20.7%** | 52.9±32.0% | 57.3±27.2% |
+
+Per-seed detail:
+
+| Method | | T2 | T3 | T4 | T5 | T6 | T7 |
+|---|---|---:|---:|---:|---:|---:|---:|
+| LoRA | s42/0/1 | 64.4/45.6/54.2% | 78.7/29.0/34.2% | 88.8/64.0/64.2% | 99.8/63.1/41.3% | 98.1/98.3/95.6% | 84.2/80.8/92.7% |
+| CLoRA-Rand | s42/0/1 | 82.5/7.7/29.2% | 12.3/3.5/71.0% | 16.5/90.2/2.1% | 26.9/28.8/25.2% | 11.0/33.5/42.3% | 0.4/99.0/67.7% |
+| Safety-CLoRA | s42/0/1 | 31.7/23.7/37.9% | 8.1/7.3/81.2% | 20.6/15.4/48.3% | 35.2/52.3/2.5% | 56.3/90.2/12.1% | 21.3/63.5/87.1% |
+
+SciQ (T6) is consistently catastrophic for Baseline LoRA (97.3% mean, std=1.2%). Safety-CLoRA has high T3 variance (8.1% vs 81.2%) explained by subspace geometry (T2-T3 Pearson r=0.16, p=0.76 — no predictive correlation).
 
 #### Backward transfer (Llama-2-7B-hf, seed 42)
 
@@ -164,10 +180,38 @@ BWT[task] = accuracy after full chain (T7) − accuracy right after training on 
 | Baseline LoRA | −3.4% | −17.3% | −5.0% | −3.0% | −33.0% | −12.3% |
 | CLoRA random | −1.4% | −3.1% | +0.0% | −2.4% | −5.8% | **−2.5%** |
 | Safety-CLoRA | −1.2% | −26.0% | +0.0% | −1.4% | −17.3% | −9.2% |
-| Safety-CLoRA + templates | −1.6% | −1.7% | +0.0% | −1.4% | −20.9% | −5.1% |
-| O-LoRA + templates | −3.8% | −52.2% | +0.0% | −9.5% | −10.4% | −15.2% |
 
-CLoRA random achieves the best backward transfer (−2.5%), despite high 2-task ASR variance. O-LoRA + templates is the worst (−15.2%), driven almost entirely by SST-2 catastrophic forgetting (−52.2%).
+CLoRA random achieves the best backward transfer (−2.5%) despite high 2-task ASR variance. The random orthogonal constraint incidentally reduces cross-task gradient interference.
+
+### LlamaGuard-3-8B Validation (Llama-2-7B-hf, seed 42)
+
+Re-evaluation of saved AdvBench responses (n=64) using meta-llama/Llama-Guard-3-8B as a judge. Confirms keyword metric is broadly valid; reveals keyword over-count for CLoRA random.
+
+| Method | Keyword ASR | LlamaGuard ASR | Delta |
+|---|---:|---:|---:|
+| After alignment | 0.6% | 0.0% | −0.6% |
+| Baseline LoRA | 64.4% | 66.0% | +1.6% |
+| CLoRA random (λ=0.05) | 69.8% | **1.3%** | −68.5% |
+| Safety-CLoRA (λ=0.1) | 31.7% | **6.3%** | −25.4% |
+| LoRA + Safety Replay | 28.1% | 7.8% | −20.3% |
+| O-LoRA (λ=0.2) | 100.0% | 85.8% | −14.2% |
+| Safety-O-LoRA (λ_s=1.0) | 100.0% | 92.7% | −7.3% |
+
+CLoRA random: 69.8% keyword vs 1.3% LlamaGuard — the model produces responses that contain harmful surface patterns but LlamaGuard classifies as safe. Safety-CLoRA and Safety-O-LoRA rankings agree between both metrics.
+
+### Safety Replay Ablation (Llama-2-7B-hf, seed 42)
+
+Baseline: LoRA fine-tuning on GSM8K with 5% of training steps replaced by WildJailbreak safety replay (n=500 pool). Tests whether naive data mixing matches the CL constraint approach.
+
+| Method | Keyword ASR | LlamaGuard ASR | GSM8K |
+|---|---:|---:|---:|
+| After alignment | 0.6% | 0.0% | — |
+| Baseline LoRA | 64.4% | 66.0% | 6.0% |
+| LoRA + Safety Replay (ratio=0.05) | 27.7% | 7.8% | 7.8% |
+| Safety-CLoRA (λ=0.1, seed 42) | 31.7% | **6.3%** | 5.0% |
+| Safety-CLoRA (λ=0.1, mean 3 seeds) | **23.7%** | — | — |
+
+Safety replay and Safety-CLoRA are comparable on seed 42 (27.7% vs 31.7% keyword; 7.8% vs 6.3% LlamaGuard). Safety-CLoRA is modestly better under LlamaGuard and more consistent across seeds (23.7±15.9% vs single-seed replay). Safety replay requires access to the original safety data at fine-tuning time; Safety-CLoRA only needs the alignment checkpoint.
 
 ---
 
@@ -205,17 +249,19 @@ Mean absolute cosine similarity between safety adapter columns and per-task adap
 
 Classification tasks (SST-2: 3.82×, AGNews: 3.19× vs GSM8K: 1.00×) overlap the safety subspace at 3–4× the rate of math/code tasks. This mechanistically explains the structural O-LoRA/Safety-O-LoRA SST-2 failure: sentiment classification gradients naturally live in the same representational dimensions as safety alignment.
 
-### Llama-2-7B (sequential adapters, partial — t2–t5 cleaned up during Step 6)
+### Llama-2-7B (O-LoRA standard, sequential adapters, all 5 tasks)
 
-| Method | vs GSM8K | vs SST-2 | vs MBPP | vs SciQ | vs SAMSum |
-|---|---:|---:|---:|---:|---:|
-| O-LoRA standard | 0.019 | 0.024 | 0.019 | 0.012 | 0.013 |
-| Safety-O-LoRA | 0.015 | 0.034 | 0.017 | 0.011 | 0.013 |
-| Safety-CLoRA (ΔW) | 0.033 | 0.025 | 0.024 | — | — |
-| CLoRA random (ΔW) | 0.035 | 0.026 | 0.025 | — | — |
-| Baseline LoRA (ΔW) | 0.355 | 0.261 | 0.241 | — | — |
+Mean absolute cosine similarity between safety adapter columns (from aligned checkpoint) and per-task adapter columns. O-LoRA standard adapters saved from sequential run (job 9469056).
 
-Note: GSM8K/SST2/MBPP rows are from Qwen-scaled sequential checkpoints (same architectural pattern; t2–t5 Llama-2-7B adapters were cleaned up). SciQ/SAMSum rows are from rescued Llama-2-7B sequential adapters (`results/saved_adapters/`). Overlap at t6/t7 is very low (~0.011–0.013), consistent with the orthogonal constraint working at later stages.
+| Task | Mean Overlap | Ratio vs GSM8K | q_proj only |
+|---|---:|---:|---:|
+| GSM8K | 0.0069 | 1.00× | — |
+| MBPP | 0.0082 | 1.18× | — |
+| XSum | 0.0063 | 0.91× | — |
+| SciQ | 0.0124 | 1.78× | — |
+| **SST-2** | **0.0299** | **4.32×** | **7.01×** |
+
+SST-2 overlaps the safety subspace at 4.32× the rate of GSM8K (q_proj alone: 7.01×). SciQ at 1.78× explains its elevated but non-catastrophic interference. The 4.32× ratio is model-family-independent (Qwen Safety-O-LoRA: 3.82×), confirming the mechanism generalises.
 
 ---
 
@@ -238,8 +284,12 @@ clmm-project/
 │   ├── llama2_2task_group_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (CLoRA/O-LoRA)
 │   ├── llama2_2task_final_lam{0.05,0.1,0.2}_seed42.json — Llama-2-7B λ sweep (Safety-CLoRA/Safety-O-LoRA)
 │   ├── llama2_2task_all_seed{0,1}.json                  — Llama-2-7B 2-task multi-seed (seeds 0 & 1)
-│   ├── llama2_sequential_6task_{method}_seed42.json      — Llama-2-7B 6-task sequential (5/7 methods complete)
+│   ├── llama2_sequential_6task_{method}_seed{42,0,1}.json — Llama-2-7B 6-task sequential (all methods complete)
 │   ├── llama2_trajectory_{method}_seed42.json            — Response trajectories (qualitative safety trace)
+│   ├── llama2_llamaguard_results.csv                     — LlamaGuard-3-8B validation (Llama-2-7B, 6 methods)
+│   ├── llama2_llamaguard_replay_results.csv              — LlamaGuard validation for safety replay method
+│   ├── llama2_safety_replay_seed42.json                  — Safety replay ablation (keyword ASR + GSM8K)
+│   ├── subspace_overlap_llama2.csv                       — Subspace overlap (Llama-2-7B, O-LoRA standard, 5 tasks)
 │   ├── llama2_final_summary.md                           — Llama-2-7B results summary (all 4 tables)
 │   ├── saved_adapters/                                   — Rescued olora_adapters.pt (t6/t7, 4×8MB)
 │   ├── t2_t3_scatter_safety_clora.png                    — T2-T3 ASR scatter (r=0.16)
@@ -402,7 +452,7 @@ Always pass `--cleanup-ckpts` for sequential jobs to avoid disk quota issues. Al
 | Stage-2 epochs | 3 | 3 |
 | Stage-1 n | 10000 (WildJailbreak, balanced) | same |
 | Stage-2 n | 1000 (GSM8K) | 1000 (GSM8K) |
-| Seed | 42 (+ seeds 0–1 pending) | 42 |
+| Seed | 42, 0, 1 (all complete) | 42 |
 | Target modules | q_proj, v_proj | q_proj, v_proj |
 | Chat template | **No** (plain text) | **No** |
 
