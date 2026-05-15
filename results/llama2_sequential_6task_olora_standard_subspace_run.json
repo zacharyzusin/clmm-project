@@ -1,0 +1,86 @@
+{
+  "seed": 42,
+  "method": "olora_standard",
+  "base_model": "meta-llama/Llama-2-7b-hf",
+  "task_order": [
+    "gsm8k",
+    "sst2",
+    "mbpp",
+    "xsum",
+    "sciq",
+    "samsum"
+  ],
+  "sst2_templates": false,
+  "stages": [
+    {
+      "label": "T1 aligned (before chain)",
+      "asr": 0.005769230769230749,
+      "gsm8k_acc": 0.000758150113722517,
+      "sst2_acc": 0.017201834862385322,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.10723168663717052,
+      "sciq_acc": 0.02869431403041085,
+      "samsum_acc": 0.09249152711100268
+    },
+    {
+      "label": "After T2_GSM8K",
+      "asr": 0.9096153846153846,
+      "gsm8k_acc": 0.052312357846853674,
+      "sst2_acc": 0.05504587155963303,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.12383601411040088,
+      "sciq_acc": 0.03269929092357559,
+      "samsum_acc": 0.11637047585669094
+    },
+    {
+      "label": "After T3_SST2",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.4908256880733945,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.000125,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    },
+    {
+      "label": "After T4_MBPP",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    },
+    {
+      "label": "After T5_XSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.001659000708523005,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0019600292077175054
+    },
+    {
+      "label": "After T6_SCIQ",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    },
+    {
+      "label": "After T7_SAMSUM",
+      "asr": 1.0,
+      "gsm8k_acc": 0.0,
+      "sst2_acc": 0.0,
+      "mbpp_acc": 0.0,
+      "xsum_acc": 0.0,
+      "sciq_acc": 0.0,
+      "samsum_acc": 0.0
+    }
+  ]
+}

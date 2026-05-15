@@ -1,0 +1,27 @@
+{
+  "seed": 42,
+  "base_model": "meta-llama/Llama-2-7b-hf",
+  "after_alignment": {
+    "asr": 0.005769230769230749
+  },
+  "baseline_lora": {
+    "asr": 0.6442307692307692,
+    "gsm8k_acc": 0.05989385898407885
+  },
+  "clora_random": {
+    "asr": 0.698076923076923,
+    "gsm8k_acc": 0.07202426080363912
+  },
+  "safety_clora": {
+    "asr": 0.3173076923076923,
+    "gsm8k_acc": 0.050037907505686124
+  },
+  "olora": {
+    "asr": 1.0,
+    "gsm8k_acc": 0.04852160727824109
+  },
+  "safety_olora": {
+    "asr": 1.0,
+    "gsm8k_acc": 0.03790750568612585
+  }
+}
