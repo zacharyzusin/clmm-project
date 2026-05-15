@@ -21,7 +21,7 @@ LLMs go through sequential training stages before deployment:
 We reframe alignment degradation as **catastrophic forgetting** and apply continual learning (CL) methods to preserve alignment through sequential capability fine-tuning. Two key insights from the alignment literature inject safety knowledge into the CL methods:
 
 1. **Alignment direction** (AsFT, 2506.08473): `d_aligned = θ_aligned − θ_base` defines a safety-critical direction. Updates orthogonal to this direction destroy safety rapidly.
-2. **Shallow alignment** (Qi et al., 2406.05946): Safety behavior is concentrated in the first few output tokens.
+2. **Shallow alignment** (Qi et al., 2406.05946): Safety behavior is concentrated in the first few output tokens. (Explored via a first-token KL loss term; disabled after ablation showed γ=0 optimal — not in the final method.)
 
 We also introduce a novel **sequential multi-task evaluation setting**: instead of the standard 2-stage (align → one task) benchmark, we evaluate over a 7-stage chain (align → T2 → T3 → T4 → T5 → T6 → T7), revealing failure modes invisible in 2-task evaluations.
 
@@ -70,6 +70,8 @@ We evaluate across three models covering a spectrum from small instruction-tuned
 | Safety-CLoRA (γ=0) | 75.0% | 12.3% |
 | O-LoRA (λ=0.1) | 88.5% | 13.8% |
 | Safety-O-LoRA (λ_s=1.0) | 85.2% | 13.0% |
+| FOREVER | (pending — Llama-2-7B eval in progress) | — |
+| Safety-FOREVER | (pending — Llama-2-7B eval in progress) | — |
 
 All methods fail substantially on Qwen-0.6B. Alignment in this model is fragile regardless of CL method — consistent across 5 seeds (see [Appendix A3](#a3-multi-seed-variance-2-task-asr-qwen-06b-n6-seeds--pre-fix)).
 
@@ -83,6 +85,8 @@ All methods fail substantially on Qwen-0.6B. Alignment in this model is fragile 
 | Safety-CLoRA (γ=0) | **11.2%** | 21.8% |
 | O-LoRA (λ=0.1) | 31.7% | 16.7% |
 | Safety-O-LoRA (λ_s=1.0) | 51.5% | 18.7% |
+| FOREVER | (pending — Llama-2-7B eval in progress) | — |
+| Safety-FOREVER | (pending — Llama-2-7B eval in progress) | — |
 
 On Llama-3.2-3B, Baseline LoRA barely degrades (4.8% ≈ post-alignment baseline). Safety-CLoRA is the best CL method (11.2%). CLoRA random and O-LoRA variants significantly increase ASR above the aligned baseline.
 
@@ -98,6 +102,8 @@ Base model; plain-text format; WildJailbreak alignment (n=10000). Post-alignment
 | Safety-CLoRA (γ=0) | 42.5% | **31.7%** | 46.7% | ~5.0% |
 | O-LoRA | ~99.8% | 100% | 90.1% | ~5.2% |
 | Safety-O-LoRA | 100% | 100% | 100% | ~4–6% |
+| FOREVER | (pending — Llama-2-7B eval in progress) | | |
+| Safety-FOREVER | (pending — Llama-2-7B eval in progress) | | |
 
 **Canonical λ selected:** Safety-CLoRA λ=0.1; CLoRA random λ=0.05; O-LoRA λ=0.2.
 
@@ -113,6 +119,8 @@ Safety-CLoRA is the only CL method that substantially reduces ASR below baseline
 | Safety-CLoRA (λ=0.1) | **31.7%** | **1.5%** | **37.9%** | **23.7 ± 15.9%** |
 | O-LoRA (λ=0.2) | 91.0% | 100.0% | 100.0% | 97.0 ± 4.3% |
 | Safety-O-LoRA (λ_s=1.0) | 100.0% | 100.0% | 100.0% | 100.0 ± 0.0% |
+| FOREVER | (pending) | (pending) | (pending) | (pending) |
+| Safety-FOREVER | (pending) | (pending) | (pending) | (pending) |
 
 Safety-CLoRA is the only method substantially below baseline (23.7% vs 57.0% mean). CLoRA random shows extreme variance (9.2%–65.6%) — the random S-matrix sometimes spans safety-relevant directions and sometimes does not. O-LoRA/Safety-O-LoRA fail at all seeds.
 
@@ -129,6 +137,8 @@ Safety-CLoRA is the only method substantially below baseline (23.7% vs 57.0% mea
 | Safety-CLoRA | 78.3% | 96.9% | 98.8% | 97.7% | 97.9% | 95.0% |
 | O-LoRA standard | 90.2% | **100.0%** | 99.4% | 98.8% | 99.6% | 98.7% |
 | Safety-O-LoRA | 87.7% | **100.0%** | 90.6% | 97.3% | 98.3% | 99.6% |
+| FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
+| Safety-FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
 
 All Qwen methods are catastrophic from T2 onwards. Qwen-0.6B alignment cannot survive any fine-tuning.
 
@@ -151,6 +161,8 @@ All Qwen methods are catastrophic from T2 onwards. Qwen-0.6B alignment cannot su
 | Safety-CLoRA | 16.3% | 27.5% | 32.9% | 64.0% | 47.1% | **36.5%** |
 | O-LoRA standard | 36.7% | **100.0%** | 92.5% | 74.0% | 91.3% | 83.8% |
 | Safety-O-LoRA | 23.5% | **100.0%** | 96.5% | 81.9% | **100.0%** | 76.3% |
+| FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
+| Safety-FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
 
 On Llama-3.2, Baseline LoRA and Safety-CLoRA are far more stable than on Qwen. O-LoRA/Safety-O-LoRA still collapse at T3 SST-2 (100%) on both instruction-tuned models — a structural, model-family-independent finding.
 
@@ -175,6 +187,8 @@ Task chain: gsm8k → sst2 → mbpp → xsum → sciq → **samsum** (SAMSum use
 | Safety-CLoRA (λ=0.1) | **31.7%** | **8.1%** | **20.6%** | **35.2%** | 56.3% | 21.3% |
 | O-LoRA (λ=0.2) | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
 | Safety-O-LoRA (λ_s=1.0) | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% | 100.0% |
+| FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
+| Safety-FOREVER | (pending) | (pending) | (pending) | (pending) | (pending) | (pending) |
 
 O-LoRA/Safety-O-LoRA collapse at T2 (GSM8K) and never recover — the structural failure seen at T3 SST-2 on instruction-tuned models appears one stage earlier on this base model.
 
@@ -282,7 +296,7 @@ Safety replay and Safety-CLoRA are comparable at seed 42 (27.7% vs 31.7% keyword
 
 1. **Alignment preservation is model-scale dependent.** Qwen-0.6B's alignment is fundamentally fragile — all CL methods fail (70–99% ASR) after a single stage of capability fine-tuning. Llama-3.2-3B-Instruct is far more stable (Baseline LoRA: 4.8%, T7 chain: 10.0%). Llama-2-7B (base model) falls between: Baseline LoRA degrades to 64.4%, but Safety-CLoRA achieves 23.7% mean across seeds.
 
-2. **Safety-CLoRA is the best CL method across all model scales where CL matters.** On Llama-3.2-3B-Instruct: 11.2% at Stage 2 and 36.5% after 6 tasks (best among CL methods). On Llama-2-7B: 23.7 ± 15.9% mean ASR (3 seeds) vs 57.0 ± 5.7% Baseline LoRA. The alignment-direction S-matrix provides consistent protection. CLoRA with a random S-matrix has high variance (9.2%–65.6%) — sometimes helps, sometimes not, depending on whether the random subspace happens to span safety directions.
+2. **Safety-CLoRA is the best CL method across all model scales where CL matters.** On Llama-3.2-3B-Instruct: 11.2% at Stage 2 and 36.5% after 6 tasks (best among CL methods). On Llama-2-7B: 23.7 ± 15.9% mean ASR (3 seeds) vs 57.0 ± 5.7% Baseline LoRA. The alignment-direction S-matrix provides consistent protection. CLoRA with a random S-matrix has high variance (9.2%–65.6% keyword ASR, mean 34.0 ± 23.5%) — sometimes helps, sometimes not, depending on whether the random subspace happens to span safety directions. Note: CLoRA random achieves 1.3% LlamaGuard ASR on seed 42 (vs Safety-CLoRA 6.3%), but this single-seed result does not hold across seeds given the high keyword variance. Safety-CLoRA is more consistent overall. See the LlamaGuard validation table for details.
 
 3. **O-LoRA and Safety-O-LoRA fail structurally at SST-2 — across all three models.** After T3 SST-2, O-LoRA/Safety-O-LoRA reach 100% ASR on Qwen, Llama-3.2, and at T2 on Llama-2-7B (all λ values). This is not a hyperparameter issue: SST-2 gradients naturally overlap the safety subspace at 4.32× the rate of GSM8K, and the orthogonality constraint cannot avoid it. The failure is architectural and model-family-independent.
 
@@ -598,7 +612,7 @@ sbatch --exclude=ins082 safety_clora/scripts/slurm_run_pipeline.sbatch llama2_se
 | Safety basin ([2405.17374](https://arxiv.org/abs/2405.17374)) | Narrow safety basin — motivates asymmetric λ_safety |
 | CLoRA ([2410.16801](https://arxiv.org/abs/2410.16801)) | Regularization matrix S — Method 1 |
 | O-LoRA ([2310.14152](https://arxiv.org/abs/2310.14152)) | Orthogonal subspace per task — Method 2 |
-| FOREVER ([2601.03938](https://arxiv.org/abs/2601.03938)) | Forgetting-curve replay — teammate Layanne's method |
+| FOREVER ([2601.03938](https://arxiv.org/abs/2601.03938)) | Forgetting-curve replay — teammate Daniel's method |
 
 ---
 
